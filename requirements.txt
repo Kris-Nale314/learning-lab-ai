@@ -1,0 +1,25 @@
+# Framework Assessment Workbench Requirements
+# Core dependencies
+streamlit
+openai
+langchain
+langchain-openai
+asyncio
+tiktoken 
+pyperclip
+
+# UI and visualization
+rich
+altair
+plotly
+pandas
+
+# Utilities
+tqdm
+python-dotenv
+pydantic
+jsonschema
+
+# File handling
+python-docx
+PyPDF2

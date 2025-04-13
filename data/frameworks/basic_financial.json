@@ -1,0 +1,101 @@
+{
+    "id": "financial_performance_framework",
+    "name": "Financial Performance Assessment",
+    "description": "Framework for assessing key financial metrics and performance indicators in quarterly earnings calls",
+    "dimensions": [
+      {
+        "id": "financial_results",
+        "name": "Financial Results",
+        "description": "Assessment of core financial metrics and performance",
+        "criteria": [
+          {
+            "id": "revenue_performance",
+            "name": "Revenue Performance",
+            "question": "How did the company perform relative to revenue expectations?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Significantly below expectations (>10% miss)",
+              "5": "Significantly exceeded expectations (>10% beat)"
+            }
+          },
+          {
+            "id": "profit_margins",
+            "name": "Profit Margins",
+            "question": "How are the company's profit margins trending?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Significant margin deterioration",
+              "5": "Significant margin improvement"
+            }
+          },
+          {
+            "id": "cash_flow",
+            "name": "Cash Flow",
+            "question": "How strong is the company's cash flow position?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Poor cash flow generation, concerning trends",
+              "5": "Exceptional cash flow generation, positive trends"
+            }
+          }
+        ]
+      },
+      {
+        "id": "forward_guidance",
+        "name": "Forward Guidance",
+        "description": "Assessment of future projections and guidance",
+        "criteria": [
+          {
+            "id": "guidance_clarity",
+            "name": "Guidance Clarity",
+            "question": "How clear and specific is the company's forward guidance?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No clear guidance provided",
+              "5": "Detailed guidance with clear metrics and timeframes"
+            }
+          },
+          {
+            "id": "guidance_confidence",
+            "name": "Management Confidence",
+            "question": "How confident does management appear in their forward guidance?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Management shows significant uncertainty or hedging",
+              "5": "Management demonstrates strong confidence in projections"
+            }
+          }
+        ]
+      },
+      {
+        "id": "risk_factors",
+        "name": "Risk Factors",
+        "description": "Assessment of disclosed risks and challenges",
+        "criteria": [
+          {
+            "id": "risk_disclosure",
+            "name": "Risk Disclosure",
+            "question": "How thoroughly does the company disclose potential risks?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Minimal or vague risk disclosure",
+              "5": "Comprehensive risk disclosure with specific scenarios"
+            }
+          },
+          {
+            "id": "risk_mitigation",
+            "name": "Risk Mitigation",
+            "question": "Has the company outlined strategies to mitigate identified risks?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No clear mitigation strategies discussed",
+              "5": "Detailed mitigation plans for major risk factors"
+            }
+          }
+        ]
+      }
+    ],
+    "scoring_methods": {
+      "scale_1_5": {"min": 1, "max": 5, "step": 1, "display": "numeric"}
+    }
+  }

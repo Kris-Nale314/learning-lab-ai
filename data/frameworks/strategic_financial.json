@@ -1,0 +1,89 @@
+{
+    "id": "strategic_initiatives_framework",
+    "name": "Strategic Initiatives Assessment",
+    "description": "Framework for evaluating discussion of strategic initiatives and future direction",
+    "dimensions": [
+      {
+        "id": "product_innovation",
+        "name": "Product Innovation",
+        "description": "Assessment of new product developments and innovation",
+        "criteria": [
+          {
+            "id": "new_products",
+            "name": "New Product Announcements",
+            "question": "What new products or services were announced or discussed?",
+            "scoring_method": "evidence_based",
+            "evidence_requirements": {
+              "description": "Explicit mentions of new products or services"
+            }
+          },
+          {
+            "id": "innovation_investment",
+            "name": "Innovation Investment",
+            "question": "How is the company investing in innovation and R&D?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No clear innovation investment discussed",
+              "5": "Significant innovation investment with clear allocation details"
+            }
+          }
+        ]
+      },
+      {
+        "id": "market_expansion",
+        "name": "Market Expansion",
+        "description": "Assessment of market growth strategies",
+        "criteria": [
+          {
+            "id": "geographic_expansion",
+            "name": "Geographic Expansion",
+            "question": "What geographic expansion plans were discussed?",
+            "scoring_method": "evidence_based",
+            "evidence_requirements": {
+              "description": "Specific mentions of new geographic markets or expansion plans"
+            }
+          },
+          {
+            "id": "customer_segments",
+            "name": "Customer Segment Growth",
+            "question": "How is the company expanding into new customer segments?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No new customer segment strategy evident",
+              "5": "Clear strategy for multiple new customer segments with specific plans"
+            }
+          }
+        ]
+      },
+      {
+        "id": "competitive_position",
+        "name": "Competitive Position",
+        "description": "Assessment of competitive landscape discussions",
+        "criteria": [
+          {
+            "id": "competitor_awareness",
+            "name": "Competitor Awareness",
+            "question": "How thoroughly does management address the competitive landscape?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No meaningful discussion of competitors",
+              "5": "Detailed analysis of competitive landscape with specific strategies"
+            }
+          },
+          {
+            "id": "competitive_advantages",
+            "name": "Competitive Advantages",
+            "question": "What competitive advantages does the company highlight?",
+            "scoring_method": "evidence_based",
+            "evidence_requirements": {
+              "description": "Specific mentions of competitive advantages or differentiators"
+            }
+          }
+        ]
+      }
+    ],
+    "scoring_methods": {
+      "scale_1_5": {"min": 1, "max": 5, "step": 1, "display": "numeric"},
+      "evidence_based": {"type": "evidence_collection", "display": "list"}
+    }
+  }
