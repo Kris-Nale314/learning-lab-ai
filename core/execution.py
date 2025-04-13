@@ -1,13 +1,12 @@
 """
-Strategy Executor - Executes assessment strategies designed by the Meta Planner
+Fixed Strategy Executor - Executes assessment strategies with parallel extractors
 
-This module implements the StrategyExecutor class, which orchestrates
-the execution of assessment strategies, managing agent deployment and sequencing.
+This module implements the StrategyExecutor class with support for deploying
+multiple specialized extractors in parallel for improved performance.
 """
 
 import logging
 import json, re, os
-import re
 import asyncio
 from typing import Dict, Any, List, Optional, Tuple, Type
 
@@ -37,7 +36,7 @@ class StrategyExecutor:
     The Strategy Executor is responsible for:
     1. Running the Meta Planner to design strategies
     2. Configuring and deploying agents according to strategy
-    3. Managing processing sequences
+    3. Managing parallel extractor instances
     4. Tracking resources and adapting as needed
     5. Providing execution status and results
     """
@@ -123,8 +122,20 @@ class StrategyExecutor:
             
             # Deploy and run agents according to strategy
             processing_sequence = self.strategy.get("processing_sequence", [])
+            
+            # Process each agent type in sequence
+            unique_agent_types = []
             for agent_type in processing_sequence:
-                await self._deploy_and_run_agent(agent_type)
+                normalized_type = self._normalize_agent_type(agent_type)
+                if normalized_type not in unique_agent_types:
+                    unique_agent_types.append(normalized_type)
+            
+            # Execute each unique agent type in sequence
+            for agent_type in unique_agent_types:
+                if agent_type == 'extractor':
+                    await self._deploy_and_run_extractors()
+                else:
+                    await self._deploy_and_run_agent(agent_type)
             
             # Get final assessment result
             result = self.context.get_final_result()
@@ -160,7 +171,7 @@ class StrategyExecutor:
         
         # Process chunking
         if method == "paragraph":
-            chunks = chunker.chunk_by_paragraphs(size // 100, overlap=2)
+            chunks = chunker.chunk_by_paragraphs(size // 100, overlap_paragraphs=2)
         elif method == "semantic":
             chunks = chunker.chunk_for_assessment("auto", max_tokens_per_chunk=size)
         else:  # Default to fixed_size
@@ -169,9 +180,122 @@ class StrategyExecutor:
         self.logger.info(f"Document chunking completed, generated {len(chunks)} chunks")
         return chunks
     
+    async def _deploy_and_run_extractors(self) -> Dict[str, Any]:
+        """
+        Deploy and run multiple extractor agents in parallel.
+        
+        Returns:
+            Combined extractor results
+        """
+        self.logger.info("Deploying parallel extractor agents")
+        
+        # Set extractor processing stage
+        stage_name = "extractor_processing"
+        self.context.set_stage(stage_name)
+        
+        # Find all extractor configs from strategy
+        extractor_configs = []
+        for agent in self.strategy.get("agents", []):
+            agent_type = agent.get("agent_type", "")
+            # Check if this is any kind of extractor
+            if self._normalize_agent_type(agent_type) == 'extractor':
+                extractor_configs.append(agent)
+        
+        if not extractor_configs:
+            raise ValueError("No extractor configurations found in strategy")
+        
+        self.logger.info(f"Found {len(extractor_configs)} extractor configurations")
+        
+        # Create and run extractors in parallel
+        extractor_tasks = []
+        
+        for i, config in enumerate(extractor_configs):
+            # Create agent options
+            agent_options = {
+                **config.get("configuration", {}),
+                "instructions": config.get("instructions", ""),
+                "strategy": self.strategy
+            }
+            
+            # Create extractor with unique name
+            extractor_name = f"Extractor_{i+1}"
+            if "agent_type" in config and config["agent_type"] != "extractor":
+                # Use the specialized name if available
+                extractor_name = f"{extractor_name}_{config['agent_type']}"
+            
+            extractor = ExtractorAgent(
+                self.llm, 
+                self.context, 
+                name=extractor_name, 
+                options=agent_options
+            )
+            
+            # Create task
+            task = extractor.process()
+            extractor_tasks.append(task)
+        
+        # Run all extractors in parallel
+        self.logger.info(f"Running {len(extractor_tasks)} extractors in parallel")
+        extractor_results = await asyncio.gather(*extractor_tasks)
+        
+        # Combine results
+        combined_results = self._combine_extractor_results(extractor_results)
+        
+        # Complete stage
+        self.context.complete_stage(stage_name, {
+            "extractor_count": len(extractor_configs),
+            "evidence_count": combined_results.get("total_evidence", 0)
+        })
+        
+        return combined_results
+    
+    def _combine_extractor_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Combine results from multiple extractors.
+        
+        Args:
+            results: List of results from each extractor
+            
+        Returns:
+            Combined results
+        """
+        combined = {
+            "by_chunk": {},
+            "by_criterion": {},
+            "total_evidence": 0
+        }
+        
+        # Process each extractor's results
+        for result in results:
+            # Combine chunk results
+            for chunk_id, chunk_data in result.get("by_chunk", {}).items():
+                if chunk_id not in combined["by_chunk"]:
+                    combined["by_chunk"][chunk_id] = {
+                        "chunk_id": chunk_id,
+                        "evidence": [],
+                        "evidence_count": 0
+                    }
+                
+                # Add evidence to combined results
+                combined["by_chunk"][chunk_id]["evidence"].extend(chunk_data.get("evidence", []))
+                combined["by_chunk"][chunk_id]["evidence_count"] += chunk_data.get("evidence_count", 0)
+            
+            # Combine criterion results
+            for criterion_key, evidence_list in result.get("by_criterion", {}).items():
+                if criterion_key not in combined["by_criterion"]:
+                    combined["by_criterion"][criterion_key] = []
+                
+                combined["by_criterion"][criterion_key].extend(evidence_list)
+            
+            # Add to total evidence count
+            combined["total_evidence"] += result.get("total_evidence", 0)
+        
+        self.logger.info(f"Combined results from {len(results)} extractors: {combined['total_evidence']} total evidence items")
+        return combined
+            
     async def _deploy_and_run_agent(self, agent_type: str) -> Dict[str, Any]:
         """
-        Deploy and run an agent according to strategy.
+        Deploy and run a single agent according to strategy.
         
         Args:
             agent_type: Type of agent to deploy
@@ -185,9 +309,18 @@ class StrategyExecutor:
         # Get agent configuration from strategy
         agent_config = None
         for agent in self.strategy.get("agents", []):
-            if self._normalize_agent_type(agent.get("agent_type", "")) == normalized_agent_type:
+            agent_normalized_type = self._normalize_agent_type(agent.get("agent_type", ""))
+            if agent_normalized_type == normalized_agent_type:
                 agent_config = agent
                 break
+        
+        if not agent_config:
+            # Look for any agent with this base type regardless of specialization
+            for agent in self.strategy.get("agents", []):
+                agent_base_type = self._normalize_agent_type(agent.get("agent_type", ""))
+                if agent_base_type == normalized_agent_type:
+                    agent_config = agent
+                    break
         
         if not agent_config:
             raise ValueError(f"Agent type '{agent_type}' not found in strategy")
@@ -217,7 +350,7 @@ class StrategyExecutor:
     
     def _normalize_agent_type(self, agent_type: str) -> str:
         """
-        Normalize agent type name to handle case differences.
+        Normalize agent type name to handle case differences and specializations.
         
         Args:
             agent_type: Original agent type name
@@ -225,18 +358,25 @@ class StrategyExecutor:
         Returns:
             Normalized agent type name
         """
-        # Convert to lowercase and remove non-alphanumeric characters
-        normalized = re.sub(r'[^a-zA-Z0-9]', '', agent_type.lower())
+        # Convert to lowercase
+        normalized = agent_type.lower()
+        
+        # Extract base agent type, ignoring specializations in parentheses
+        base_type_match = re.match(r'^(\w+).*$', normalized)
+        if base_type_match:
+            base_type = base_type_match.group(1)
+        else:
+            base_type = normalized
         
         # Map to standard agent types
-        if normalized in ['extractor', 'extractagent']:
+        if base_type in ['extractor', 'extract']:
             return 'extractor'
-        elif normalized in ['evaluator', 'evaluateagent']:
+        elif base_type in ['evaluator', 'evaluate']:
             return 'evaluator'
-        elif normalized in ['reporter', 'reportagent']:
+        elif base_type in ['reporter', 'report']:
             return 'reporter'
         else:
-            return normalized
+            return base_type
     
     def _create_agent(self, agent_type: str, options: Dict[str, Any]) -> BaseAgent:
         """
@@ -269,6 +409,13 @@ class StrategyExecutor:
         if not self.strategy:
             self.strategy = await self.plan()
         
+        # Count extractors by type
+        extractor_counts = {}
+        for agent in self.strategy.get("agents", []):
+            agent_type = agent.get("agent_type", "")
+            if self._normalize_agent_type(agent_type) == 'extractor':
+                extractor_counts[agent_type] = extractor_counts.get(agent_type, 0) + 1
+        
         # Create a user-friendly preview of the strategy
         preview = {
             "strategy_type": self.strategy.get("strategy_type", "unknown"),
@@ -279,6 +426,8 @@ class StrategyExecutor:
                 "overlap": self.strategy.get("chunking_strategy", {}).get("overlap", 0),
                 "rationale": self.strategy.get("chunking_strategy", {}).get("rationale", "")
             },
+            "extractors": extractor_counts,
+            "total_extractors": sum(extractor_counts.values()),
             "agents": [],
             "processing_sequence": self.strategy.get("processing_sequence", []),
             "estimated_tokens": self.strategy.get("token_allocation", {}).get("total_estimated", 0)

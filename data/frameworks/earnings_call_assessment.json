@@ -1,0 +1,220 @@
+{
+    "id": "earnings_call_assessment",
+    "name": "Corporate Earnings Call Assessment Framework",
+    "description": "A framework for evaluating the quality, content, and hidden messages in corporate earnings call transcripts",
+    "dimensions": [
+      {
+        "id": "business_strategy",
+        "name": "Business Strategy",
+        "description": "Assessment of the company's strategic direction and vision",
+        "criteria": [
+          {
+            "id": "vision_clarity",
+            "name": "Vision Clarity",
+            "question": "How clearly does the company articulate its long-term vision and strategy?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No clear vision presented; vague or contradictory statements about direction",
+              "2": "Basic vision mentioned but lacks specificity or compelling narrative",
+              "3": "Adequate explanation of vision with some supporting details",
+              "4": "Clear, comprehensive vision with specific strategic initiatives",
+              "5": "Exceptional, inspiring vision with detailed roadmap and compelling narrative"
+            }
+          },
+          {
+            "id": "execution_discussion",
+            "name": "Execution Discussion",
+            "question": "How effectively does management discuss the execution of strategic initiatives?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No discussion of execution or implementation",
+              "2": "Vague references to execution without specifics",
+              "3": "Standard reporting on execution with some metrics",
+              "4": "Detailed analysis of execution with clear metrics and challenges",
+              "5": "Comprehensive execution review with insights, learnings, and adaptations"
+            }
+          }
+        ]
+      },
+      {
+        "id": "talent_leadership",
+        "name": "Talent & Leadership",
+        "description": "Assessment of comments related to human capital and leadership effectiveness",
+        "criteria": [
+          {
+            "id": "leadership_confidence",
+            "name": "Leadership Confidence",
+            "question": "How confident does the leadership team appear during the call?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Appears extremely nervous, unprepared, or evasive",
+              "2": "Shows uncertainty when addressing challenging questions",
+              "3": "Presents with standard professional confidence",
+              "4": "Demonstrates strong, assured presence throughout the call",
+              "5": "Exceptionally poised, authoritative, and inspirational"
+            }
+          },
+          {
+            "id": "talent_discussion",
+            "name": "Talent Strategy",
+            "question": "How thoroughly does the company discuss talent acquisition, development, and retention?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No mention of talent or human capital",
+              "2": "Brief, superficial mentions of hiring or talent",
+              "3": "Standard reporting on workforce metrics and initiatives",
+              "4": "Detailed talent strategy with specific programs and outcomes",
+              "5": "Talent positioned as central to strategy with innovative approaches"
+            }
+          }
+        ]
+      },
+      {
+        "id": "technology_innovation",
+        "name": "Technology & Innovation",
+        "description": "Assessment of technological capabilities and innovation focus",
+        "criteria": [
+          {
+            "id": "tech_investment",
+            "name": "Technology Investment",
+            "question": "How substantial are the company's investments in technology infrastructure and capabilities?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Minimal or no technology investment mentioned",
+              "2": "Basic maintenance-level technology investment",
+              "3": "Standard industry-level technology investment",
+              "4": "Significant above-industry technology investments with clear rationale",
+              "5": "Transformative technology investments positioned as competitive advantage"
+            }
+          },
+          {
+            "id": "ai_strategy",
+            "name": "AI Strategy",
+            "question": "How sophisticated is the company's artificial intelligence strategy?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No mention of AI or dismissive of its relevance",
+              "2": "Superficial mentions of AI without substantive strategy",
+              "3": "Standard AI initiatives aligned with industry norms",
+              "4": "Comprehensive AI strategy with specific use cases and results",
+              "5": "Industry-leading AI approach with demonstrable business impact"
+            }
+          }
+        ]
+      },
+      {
+        "id": "market_competition",
+        "name": "Market & Competition",
+        "description": "Assessment of competitive positioning and market awareness",
+        "criteria": [
+          {
+            "id": "competitor_awareness",
+            "name": "Competitor Awareness",
+            "question": "How effectively does the company demonstrate awareness of competitive threats and opportunities?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No acknowledgment of competition",
+              "2": "Minimal references to competitors without meaningful analysis",
+              "3": "Standard competitive positioning statements",
+              "4": "Detailed competitor analysis with differentiation strategy",
+              "5": "Sophisticated competitive intelligence with preemptive positioning"
+            }
+          },
+          {
+            "id": "market_expansion",
+            "name": "Market Expansion",
+            "question": "How ambitious and credible are the company's market expansion plans?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No market expansion discussed or retreating from markets",
+              "2": "Modest, incremental expansion with limited scope",
+              "3": "Solid expansion plans aligned with industry growth",
+              "4": "Ambitious expansion with clear strategy and milestones",
+              "5": "Transformative market expansion with disruptive potential"
+            }
+          }
+        ]
+      },
+      {
+        "id": "financial_outlook",
+        "name": "Financial Outlook",
+        "description": "Assessment of financial health and forward-looking projections",
+        "criteria": [
+          {
+            "id": "financial_transparency",
+            "name": "Financial Transparency",
+            "question": "How transparent is the company about its financial challenges and opportunities?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "Obfuscation or misleading statements about financial situation",
+              "2": "Minimal transparency with avoidance of challenging topics",
+              "3": "Standard financial reporting with basic explanations",
+              "4": "High transparency with proactive disclosure of challenges",
+              "5": "Exceptional transparency with nuanced financial storytelling"
+            }
+          },
+          {
+            "id": "future_guidance",
+            "name": "Future Guidance",
+            "question": "How confident and specific is the company's financial guidance?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No guidance or withdrawal of previous guidance",
+              "2": "Vague, heavily caveated guidance with minimal specifics",
+              "3": "Standard industry guidance with typical confidence intervals",
+              "4": "Detailed guidance with clear assumptions and scenarios",
+              "5": "Comprehensive, confident guidance with multiple supporting metrics"
+            }
+          }
+        ]
+      },
+      {
+        "id": "unexpected_elements",
+        "name": "Unexpected Elements",
+        "description": "Assessment of unusual or surprising content in the earnings call",
+        "criteria": [
+          {
+            "id": "alien_contact_disclosure",
+            "name": "Alien Contact Disclosure",
+            "question": "Does the company reveal any communication or agreements with extraterrestrial beings?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No mention of alien contact whatsoever",
+              "2": "Vague references to 'non-traditional partners' or 'entities beyond our world'",
+              "3": "Acknowledgment of 'preliminary discussions with non-terrestrial intelligence'",
+              "4": "Detailed discussion of alien technology licensing agreements",
+              "5": "Full disclosure of interstellar joint ventures and revenue projections"
+            }
+          },
+          {
+            "id": "time_travel_initiatives",
+            "name": "Time Travel Initiatives",
+            "question": "How developed is the company's time travel research program?",
+            "scoring_method": "scale_1_5",
+            "scoring_definitions": {
+              "1": "No mention of temporal research or chronological manipulation",
+              "2": "Vague references to 'future forecasting capabilities' beyond traditional methods",
+              "3": "Disclosure of R&D investment in 'temporal mechanics' or 'chronodynamics'",
+              "4": "Discussion of successful experiments in 'limited temporal displacement'",
+              "5": "Detailed revenue projections from 'chrono-arbitrage' or 'past-modification services'"
+            }
+          }
+        ]
+      }
+    ],
+    "scoring_methods": {
+      "scale_1_5": {
+        "min": 1,
+        "max": 5,
+        "step": 1,
+        "display": "numeric",
+        "descriptions": {
+          "1": "Poor/Nonexistent",
+          "2": "Below Average",
+          "3": "Average/Operational",
+          "4": "Excellent/Strategic",
+          "5": "Exceptional/Transformative"
+        }
+      }
+    }
+  }

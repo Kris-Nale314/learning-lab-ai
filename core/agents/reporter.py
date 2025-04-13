@@ -1,8 +1,8 @@
 """
-Reporter Agent - Generates assessment reports based on evaluation results
+Enhanced Reporter Agent - Generates structured assessment reports from evaluation results
 
-This agent takes evaluation results and generates structured, presentation-ready
-assessment reports in multiple formats.
+This agent takes structured evaluation results and produces formatted assessment reports
+including detailed scorecards and visualization-ready data.
 """
 
 import json
@@ -15,14 +15,14 @@ from core.context import AssessmentContext
 
 class ReporterAgent(BaseAgent):
     """
-    Generates assessment reports based on evaluation results.
+    Generates structured assessment reports based on evaluation results.
     
     The Reporter is responsible for:
-    1. Formatting assessment results for presentation
-    2. Generating executive summaries and detailed reports
-    3. Creating data structures for visualization
-    4. Adding evidence links and context
-    5. Structuring output for different use cases
+    1. Creating detailed scorecards for criteria and dimensions
+    2. Formatting assessment results for clear presentation
+    3. Generating data structures for visualization
+    4. Adding evidence links and cross-references
+    5. Producing multiple output formats for different audiences
     """
     
     def __init__(
@@ -44,12 +44,13 @@ class ReporterAgent(BaseAgent):
         super().__init__(name, "reporter", llm, context, options or {})
         
         # Get reporter configuration from options
-        self.report_type = options.get("report_type", "comprehensive")
+        self.report_type = options.get("report_type", "scorecard")  # Default to scorecard
         self.include_evidence = options.get("include_evidence", True)
         self.include_confidence = options.get("include_confidence", True)
+        self.audience = options.get("audience", "executive")  # executive, technical, or comprehensive
         self.custom_instructions = options.get("instructions", "")
         
-        self.logger.info(f"{name} initialized with report_type={self.report_type}")
+        self.logger.info(f"{name} initialized with report_type={self.report_type}, audience={self.audience}")
         
     async def process(self) -> Dict[str, Any]:
         """
@@ -62,7 +63,7 @@ class ReporterAgent(BaseAgent):
         self.start_timer()
         
         try:
-            # Get overall assessment and framework
+            # Get framework and overall assessment
             framework = self.context.framework
             overall_assessment = self.context.get_overall_assessment()
             
@@ -72,30 +73,28 @@ class ReporterAgent(BaseAgent):
                 "formats": {}
             }
             
-            # Generate reports based on configuration
+            # Always generate scorecard as the default format
+            reports["formats"]["scorecard"] = self._generate_scorecard()
+            
+            # Generate additional reports based on configuration
             if self.report_type in ["comprehensive", "all"]:
                 # Generate multiple report formats
                 reports["formats"]["executive_summary"] = await self._generate_executive_summary()
                 reports["formats"]["detailed_assessment"] = await self._generate_detailed_assessment()
-                reports["formats"]["scorecard"] = await self._generate_scorecard()
                 
                 if self.include_evidence:
                     reports["formats"]["evidence_report"] = await self._generate_evidence_report()
-            
+                
             elif self.report_type == "executive":
-                # Generate executive summary only
+                # Generate executive summary
                 reports["formats"]["executive_summary"] = await self._generate_executive_summary()
                 
-            elif self.report_type == "scorecard":
-                # Generate scorecard only
-                reports["formats"]["scorecard"] = await self._generate_scorecard()
-                
             elif self.report_type == "detailed":
-                # Generate detailed assessment only
+                # Generate detailed assessment
                 reports["formats"]["detailed_assessment"] = await self._generate_detailed_assessment()
                 
-            elif self.report_type == "evidence":
-                # Generate evidence report only
+            elif self.report_type == "evidence" and self.include_evidence:
+                # Generate evidence report
                 reports["formats"]["evidence_report"] = await self._generate_evidence_report()
             
             # Always include visualization data
@@ -146,9 +145,141 @@ class ReporterAgent(BaseAgent):
             "criteria_coverage": assessment_stats.get("assessment_coverage", 0),
             "total_evidence": assessment_stats.get("total_evidence", 0),
             "report_type": self.report_type,
+            "audience": self.audience,
             "includes_evidence": self.include_evidence,
             "includes_confidence": self.include_confidence
         }
+    
+    def _generate_scorecard(self) -> Dict[str, Any]:
+        """
+        Generate structured scorecard report.
+        
+        Returns:
+            Scorecard report with detailed ratings for all criteria
+        """
+        self.logger.info("Generating structured scorecard")
+        
+        # Get framework info
+        framework = self.context.framework
+        framework_name = framework.get("name", "Assessment Framework")
+        
+        # Get overall assessment
+        overall_assessment = self.context.get_overall_assessment()
+        overall_rating = overall_assessment.get("average_rating")
+        exec_summary = overall_assessment.get("executive_summary", "")
+        key_strengths = overall_assessment.get("key_strengths", [])
+        key_improvements = overall_assessment.get("key_improvements", [])
+        recommendations = overall_assessment.get("recommendations", [])
+        
+        # Process each dimension
+        dimensions = []
+        for dimension in framework.get("dimensions", []):
+            dimension_id = dimension.get("id", "")
+            dimension_name = dimension.get("name", "")
+            
+            if not dimension_id:
+                continue
+                
+            # Get dimension summary
+            dimension_summary = self.context.get_dimension_summary(dimension_id)
+            avg_rating = dimension_summary.get("average_rating")
+            strengths = dimension_summary.get("strengths", [])
+            weaknesses = dimension_summary.get("weaknesses", [])
+            insights = dimension_summary.get("insights", [])
+            summary_text = dimension_summary.get("summary", "")
+            
+            # Process criteria in this dimension
+            criteria = []
+            for criterion in dimension.get("criteria", []):
+                criterion_id = criterion.get("id", "")
+                criterion_name = criterion.get("name", "")
+                criterion_question = criterion.get("question", "")
+                
+                if not criterion_id:
+                    continue
+                    
+                # Get assessment for this criterion
+                assessment = self.context.get_criterion_assessment(dimension_id, criterion_id)
+                
+                if not assessment or assessment.get("rating") is None:
+                    # Skip criteria without assessments
+                    continue
+                
+                # Extract criterion data
+                rating = assessment.get("rating")
+                rationale = assessment.get("rationale", "")
+                confidence = assessment.get("confidence", 0.0) if self.include_confidence else None
+                evidence_ids = assessment.get("evidence_ids", [])
+                
+                # Find scoring definition for this rating
+                rating_definition = ""
+                scoring_method = criterion.get("scoring_method", "scale_1_5")
+                scoring_definitions = criterion.get("scoring_definitions", {})
+                
+                if str(rating) in scoring_definitions:
+                    rating_definition = scoring_definitions[str(rating)]
+                
+                # Create criterion entry
+                criterion_entry = {
+                    "id": criterion_id,
+                    "name": criterion_name,
+                    "question": criterion_question,
+                    "rating": rating,
+                    "rating_definition": rating_definition,
+                    "rationale": rationale,
+                    "confidence": confidence,
+                    "evidence_count": len(evidence_ids),
+                    "has_evidence": len(evidence_ids) > 0
+                }
+                
+                # Add evidence if requested
+                if self.include_evidence and evidence_ids:
+                    evidence_items = []
+                    for evidence_id in evidence_ids:
+                        evidence = self.context.get_evidence(evidence_id)
+                        if evidence:
+                            # Create evidence entry
+                            evidence_items.append({
+                                "id": evidence_id,
+                                "text": evidence.get("text", ""),
+                                "relevance": evidence.get("metadata", {}).get("relevance", ""),
+                                "confidence": evidence.get("metadata", {}).get("confidence", 0.0) if self.include_confidence else None
+                            })
+                    
+                    criterion_entry["evidence"] = evidence_items
+                
+                criteria.append(criterion_entry)
+            
+            # Add dimension entry
+            dimension_entry = {
+                "id": dimension_id,
+                "name": dimension_name,
+                "average_rating": avg_rating,
+                "criteria_count": len(criteria),
+                "criteria": criteria,
+                "strengths": strengths,
+                "weaknesses": weaknesses,
+                "insights": insights,
+                "summary": summary_text
+            }
+            
+            dimensions.append(dimension_entry)
+        
+        # Create scorecard
+        scorecard = {
+            "title": f"Assessment Scorecard: {framework_name}",
+            "framework_id": framework.get("id", "unknown"),
+            "overall_rating": overall_rating,
+            "executive_summary": exec_summary,
+            "key_strengths": key_strengths,
+            "key_improvements": key_improvements,
+            "recommendations": recommendations,
+            "dimensions": dimensions,
+            "criteria_coverage": overall_assessment.get("criteria_coverage", 0),
+            "scoring_methods": framework.get("scoring_methods", {})
+        }
+        
+        return scorecard
     
     async def _generate_executive_summary(self) -> Dict[str, Any]:
         """
@@ -161,67 +292,34 @@ class ReporterAgent(BaseAgent):
         
         # Get overall assessment
         overall_assessment = self.context.get_overall_assessment()
-        assessment_text = overall_assessment.get("assessment", "")
+        
+        # Extract key information
+        exec_summary = overall_assessment.get("executive_summary", "")
+        avg_rating = overall_assessment.get("average_rating")
+        key_strengths = overall_assessment.get("key_strengths", [])
+        key_improvements = overall_assessment.get("key_improvements", [])
+        recommendations = overall_assessment.get("recommendations", [])
+        success_factors = overall_assessment.get("critical_success_factors", [])
         
         # Get framework info
         framework = self.context.framework
         framework_name = framework.get("name", "Assessment Framework")
         
-        # Get key metrics
-        avg_rating = overall_assessment.get("average_rating")
-        criteria_coverage = overall_assessment.get("criteria_coverage", 0)
-        total_evidence = overall_assessment.get("total_evidence", 0)
-        
-        # Prepare system and human prompts
-        system_prompt = """You are an expert report writer. Your task is to create a concise, executive-friendly summary of an assessment. Focus on clarity, insights, and actionable recommendations."""
-        
-        # Add custom instructions if provided
-        if self.custom_instructions:
-            system_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{self.custom_instructions}"
-        
-        human_prompt = f"""Create an executive summary for the following assessment results.
-
-FRAMEWORK: {framework_name}
-
-KEY METRICS:
-- Overall Rating: {avg_rating}
-- Evidence Collected: {total_evidence} items
-- Assessment Coverage: {criteria_coverage*100:.1f}%
-
-ASSESSMENT OVERVIEW:
-{assessment_text}
-
-Please format your executive summary as follows:
-1. A brief introduction explaining the purpose of the assessment
-2. Key findings section with 3-5 bullet points highlighting the most important insights
-3. A concise summary of strengths and areas for improvement
-4. Clear, actionable recommendations
-5. A brief conclusion
-
-Keep your summary concise, direct, and actionable for executive readers."""
-        
-        # Call LLM for summary
-        summary_text, _ = await self._safe_llm_call(
-            "generate_completion",
-            prompt=human_prompt,
-            system_prompt=system_prompt,
-            temperature=0.3,
-            max_tokens=1200
-        )
-        
         # Create executive summary
-        executive_summary = {
+        summary = {
             "title": f"Executive Summary: {framework_name} Assessment",
-            "content": summary_text,
-            "metrics": {
-                "overall_rating": avg_rating,
-                "evidence_count": total_evidence,
-                "coverage": criteria_coverage
-            }
+            "overall_rating": avg_rating,
+            "executive_summary": exec_summary,
+            "key_strengths": key_strengths,
+            "key_improvements": key_improvements,
+            "recommendations": recommendations,
+            "critical_success_factors": success_factors,
+            "criteria_coverage": overall_assessment.get("criteria_coverage", 0),
+            "timestamp": overall_assessment.get("timestamp", "")
         }
         
-        return executive_summary
-    
+        return summary
+        
     async def _generate_detailed_assessment(self) -> Dict[str, Any]:
         """
         Generate detailed assessment report.
@@ -233,332 +331,61 @@ Keep your summary concise, direct, and actionable for executive readers."""
         
         # Get overall assessment
         overall_assessment = self.context.get_overall_assessment()
-        assessment_text = overall_assessment.get("assessment", "")
         
         # Get framework info
         framework = self.context.framework
         framework_name = framework.get("name", "Assessment Framework")
         
-        # Get dimension summaries and assessments
-        dimension_sections = []
+        # Extract cross-dimension insights
+        relationships = overall_assessment.get("cross_dimension_relationships", [])
+        patterns = overall_assessment.get("cross_dimension_patterns", [])
         
-        for dimension in framework.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            if not dimension_id:
-                continue
-            
-            # Get dimension summary
-            dimension_summary = self.context.get_dimension_summary(dimension_id)
-            summary_text = dimension_summary.get("summary", "")
-            
-            # Get criteria assessments
-            criteria_sections = []
-            
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                criterion_name = criterion.get("name", "")
-                criterion_question = criterion.get("question", "")
-                
-                if not criterion_id:
-                    continue
-                
-                # Get criterion assessment
-                assessment = self.context.get_criterion_assessment(dimension_id, criterion_id)
-                
-                if not assessment:
-                    continue
-                
-                rating = assessment.get("rating")
-                rationale = assessment.get("rationale", "")
-                confidence = assessment.get("confidence", 0)
-                evidence_ids = assessment.get("evidence_ids", [])
-                
-                # Include evidence if requested
-                evidence_text = ""
-                if self.include_evidence and evidence_ids:
-                    evidence_list = []
-                    for evidence_id in evidence_ids:
-                        evidence = self.context.get_evidence(evidence_id)
-                        if evidence:
-                            evidence_list.append(evidence.get("text", ""))
-                    
-                    if evidence_list:
-                        evidence_text = "\n\n**Supporting Evidence:**\n\n" + "\n\n".join([f"- {ev}" for ev in evidence_list])
-                
-                # Create criterion section
-                criterion_section = {
-                    "id": criterion_id,
-                    "name": criterion_name,
-                    "question": criterion_question,
-                    "rating": rating,
-                    "rationale": rationale,
-                    "confidence": confidence if self.include_confidence else None,
-                    "evidence_count": len(evidence_ids),
-                    "has_evidence": len(evidence_ids) > 0
-                }
-                
-                criteria_sections.append(criterion_section)
-            
-            # Create dimension section
-            dimension_section = {
-                "id": dimension_id,
-                "name": dimension_name,
-                "summary": summary_text,
-                "average_rating": dimension_summary.get("average_rating"),
-                "criteria": criteria_sections
-            }
-            
-            dimension_sections.append(dimension_section)
+        # Create detailed assessment (using scorecard data as base)
+        scorecard = self._generate_scorecard()
         
-        # Prepare system and human prompts for introduction
-        system_prompt = """You are an expert report writer. Your task is to create a compelling introduction to a detailed assessment report. Focus on setting context, explaining the assessment approach, and outlining what readers can expect in the report."""
+        # Add additional detailed information
+        detailed = {
+            "title": f"Detailed Assessment: {framework_name}",
+            "overall_rating": scorecard.get("overall_rating"),
+            "executive_summary": scorecard.get("executive_summary"),
+            "key_strengths": scorecard.get("key_strengths"),
+            "key_improvements": scorecard.get("key_improvements"),
+            "recommendations": scorecard.get("recommendations"),
+            "dimensions": scorecard.get("dimensions"),
+            "cross_dimension_relationships": relationships,
+            "cross_dimension_patterns": patterns,
+            "criteria_coverage": overall_assessment.get("criteria_coverage", 0)
+        }
         
-        # Add custom instructions if provided
-        if self.custom_instructions:
-            system_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{self.custom_instructions}"
-        
-        human_prompt = f"""Create an introduction for a detailed assessment report.
+        # Create introduction for the detailed report
+        prompt = f"""Create an introduction for a detailed assessment report.
 
 FRAMEWORK: {framework_name}
-ASSESSMENT APPROACH: This assessment was conducted by analyzing the document against {len(framework.get('dimensions', []))} dimensions and {sum(len(dim.get('criteria', [])) for dim in framework.get('dimensions', []))} criteria.
+OVERALL RATING: {scorecard.get("overall_rating")}
+NUMBER OF DIMENSIONS: {len(scorecard.get("dimensions", []))}
+CRITERIA COVERAGE: {overall_assessment.get("criteria_coverage", 0) * 100:.1f}%
 
-KEY METRICS:
-- Overall Rating: {overall_assessment.get('average_rating')}
-- Evidence Collected: {overall_assessment.get('total_evidence', 0)} items
-- Assessment Coverage: {overall_assessment.get('criteria_coverage', 0)*100:.1f}%
-
-Please craft an introduction that:
-1. Explains the purpose of the assessment
-2. Briefly describes the assessment methodology
-3. Outlines what readers will find in the report
-4. Sets expectations for how to interpret the ratings and evidence
+The introduction should:
+1. Explain the purpose of the assessment
+2. Describe the framework and its dimensions
+3. Outline what readers will find in the report
+4. Provide guidance on how to interpret the ratings
 
 Keep your introduction concise but informative."""
-        
-        # Call LLM for introduction
-        introduction_text, _ = await self._safe_llm_call(
+
+        # Get introduction text
+        introduction, _ = await self._safe_llm_call(
             "generate_completion",
-            prompt=human_prompt,
-            system_prompt=system_prompt,
+            prompt=prompt,
+            system_prompt="You are an expert report writer creating introductions for assessment reports.",
             temperature=0.3,
             max_tokens=800
         )
         
-        # Create evidence report
-        evidence_report = {
-            "title": f"Evidence Report: {framework_name}",
-            "introduction": introduction_text,
-            "evidence_map": evidence_map,
-            "total_evidence": sum(
-                len(criterion_data["evidence"]) 
-                for dimension_data in evidence_map.values() 
-                for criterion_data in dimension_data["criteria"].values()
-            )
-        }
+        detailed["introduction"] = introduction
         
-        return evidence_report
+        return detailed
     
-    def _generate_visualization_data(self) -> Dict[str, Any]:
-        """
-        Generate data structures for visualization.
-        
-        Returns:
-            Visualization data
-        """
-        self.logger.info("Generating visualization data")
-        
-        # Get framework info
-        framework = self.context.framework
-        framework_name = framework.get("name", "Assessment Framework")
-        
-        # Get overall assessment
-        overall_assessment = self.context.get_overall_assessment()
-        
-        # Generate radar chart data
-        radar_data = []
-        
-        for dimension in framework.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            if not dimension_id:
-                continue
-                
-            # Get dimension summary
-            dimension_summary = self.context.get_dimension_summary(dimension_id)
-            avg_rating = dimension_summary.get("average_rating")
-            
-            if avg_rating is not None:
-                radar_data.append({
-                    "dimension": dimension_name,
-                    "rating": avg_rating
-                })
-        
-        # Generate heatmap data
-        heatmap_data = []
-        
-        for dimension in framework.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            if not dimension_id:
-                continue
-                
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                criterion_name = criterion.get("name", "")
-                
-                if not criterion_id:
-                    continue
-                    
-                # Get criterion assessment
-                assessment = self.context.get_criterion_assessment(dimension_id, criterion_id)
-                
-                if assessment and assessment.get("rating") is not None:
-                    heatmap_data.append({
-                        "dimension": dimension_name,
-                        "criterion": criterion_name,
-                        "rating": assessment.get("rating"),
-                        "confidence": assessment.get("confidence", 0) if self.include_confidence else None
-                    })
-        
-        # Generate evidence distribution data
-        evidence_distribution = []
-        
-        for dimension in framework.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            if not dimension_id:
-                continue
-                
-            dimension_evidence = 0
-            
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                
-                if not criterion_id:
-                    continue
-                    
-                # Get evidence for this criterion
-                evidence_list = self.get_evidence_for_criterion(dimension_id, criterion_id)
-                dimension_evidence += len(evidence_list)
-            
-            evidence_distribution.append({
-                "dimension": dimension_name,
-                "evidence_count": dimension_evidence
-            })
-        
-        # Create visualization data
-        visualization_data = {
-            "title": f"Visualization Data: {framework_name}",
-            "overall_rating": overall_assessment.get("average_rating"),
-            "radar_chart": radar_data,
-            "heatmap": heatmap_data,
-            "evidence_distribution": evidence_distribution,
-            "criteria_coverage": {
-                "assessed": overall_assessment.get("criteria_assessed", 0),
-                "total": overall_assessment.get("criteria_total", 1),
-                "percentage": overall_assessment.get("criteria_coverage", 0)
-            }
-        }
-        
-        return visualization_data
-        
-        
-        # Create detailed assessment
-        detailed_assessment = {
-            "title": f"Detailed Assessment: {framework_name}",
-            "introduction": introduction_text,
-            "overall_assessment": assessment_text,
-            "dimensions": dimension_sections
-        }
-        
-        return detailed_assessment
-    
-    async def _generate_scorecard(self) -> Dict[str, Any]:
-        """
-        Generate scorecard report.
-        
-        Returns:
-            Scorecard report
-        """
-        self.logger.info("Generating scorecard")
-        
-        # Get framework info
-        framework = self.context.framework
-        framework_name = framework.get("name", "Assessment Framework")
-        
-        # Get overall assessment
-        overall_assessment = self.context.get_overall_assessment()
-        
-        # Get dimension scores
-        dimension_scores = []
-        
-        for dimension in framework.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            if not dimension_id:
-                continue
-            
-            # Get dimension summary
-            dimension_summary = self.context.get_dimension_summary(dimension_id)
-            avg_rating = dimension_summary.get("average_rating")
-            
-            # Get criteria scores
-            criteria_scores = []
-            
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                criterion_name = criterion.get("name", "")
-                
-                if not criterion_id:
-                    continue
-                
-                # Get criterion assessment
-                assessment = self.context.get_criterion_assessment(dimension_id, criterion_id)
-                
-                if not assessment:
-                    continue
-                
-                rating = assessment.get("rating")
-                confidence = assessment.get("confidence", 0)
-                
-                # Create criterion score
-                criterion_score = {
-                    "id": criterion_id,
-                    "name": criterion_name,
-                    "rating": rating,
-                    "confidence": confidence if self.include_confidence else None
-                }
-                
-                criteria_scores.append(criterion_score)
-            
-            # Create dimension score
-            dimension_score = {
-                "id": dimension_id,
-                "name": dimension_name,
-                "average_rating": avg_rating,
-                "criteria": criteria_scores
-            }
-            
-            dimension_scores.append(dimension_score)
-        
-        # Create scorecard
-        scorecard = {
-            "title": f"Scorecard: {framework_name}",
-            "overall_rating": overall_assessment.get("average_rating"),
-            "dimensions": dimension_scores,
-            "framework_id": framework.get("id", "unknown"),
-            "scoring_methods": framework.get("scoring_methods", {})
-        }
-        
-        return scorecard
-    
- 
     async def _generate_evidence_report(self) -> Dict[str, Any]:
         """
         Generate evidence report.
@@ -633,30 +460,33 @@ Keep your introduction concise but informative."""
                     "evidence": formatted_evidence
                 }
         
-        # Call LLM for introduction
-        system_prompt = """You are an expert report writer. Your task is to create a brief introduction to an evidence report. Focus on explaining how evidence was collected and how it should be interpreted."""
+        # Calculate total evidence count
+        total_evidence = sum(
+            len(criterion_data["evidence"]) 
+            for dimension_data in evidence_map.values() 
+            for criterion_data in dimension_data["criteria"].values()
+        )
         
-        # Add custom instructions if provided
-        if self.custom_instructions:
-            system_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{self.custom_instructions}"
-        
-        human_prompt = f"""Create a brief introduction for an evidence report.
+        # Create prompt for introduction
+        prompt = f"""Create a brief introduction for an evidence report.
 
-    FRAMEWORK: {framework_name}
-    EVIDENCE COLLECTED: The assessment collected evidence for criteria across {len(evidence_map)} dimensions.
+FRAMEWORK: {framework_name}
+TOTAL EVIDENCE ITEMS: {total_evidence}
+DIMENSIONS WITH EVIDENCE: {len(evidence_map)}
 
-    Please craft an introduction that:
-    1. Explains what evidence was collected
-    2. How the evidence was identified and extracted
-    3. How readers should interpret the evidence in the context of the assessment
+The introduction should:
+1. Explain what evidence was collected and how
+2. Describe how the evidence was used for assessment
+3. Provide guidance on how to interpret the evidence
+4. Explain the relevance and confidence scores (if applicable)
 
-    Keep your introduction concise and informative."""
-        
-        # Call LLM for introduction
-        introduction_text, _ = await self._safe_llm_call(
+Keep your introduction concise and focused on the evidence collection process."""
+
+        # Get introduction text
+        introduction, _ = await self._safe_llm_call(
             "generate_completion",
-            prompt=human_prompt,
-            system_prompt=system_prompt,
+            prompt=prompt,
+            system_prompt="You are an expert report writer creating introductions for evidence reports.",
             temperature=0.3,
             max_tokens=800
         )
@@ -664,23 +494,19 @@ Keep your introduction concise but informative."""
         # Create evidence report
         evidence_report = {
             "title": f"Evidence Report: {framework_name}",
-            "introduction": introduction_text,
+            "introduction": introduction,
             "evidence_map": evidence_map,
-            "total_evidence": sum(
-                len(criterion_data["evidence"]) 
-                for dimension_data in evidence_map.values() 
-                for criterion_data in dimension_data["criteria"].values()
-            )
+            "total_evidence": total_evidence
         }
         
         return evidence_report
-
+    
     def _generate_visualization_data(self) -> Dict[str, Any]:
         """
         Generate data structures for visualization.
         
         Returns:
-            Visualization data
+            Visualization-ready data
         """
         self.logger.info("Generating visualization data")
         
@@ -691,7 +517,7 @@ Keep your introduction concise but informative."""
         # Get overall assessment
         overall_assessment = self.context.get_overall_assessment()
         
-        # Generate radar chart data
+        # Generate radar chart data (dimension ratings)
         radar_data = []
         
         for dimension in framework.get("dimensions", []):
@@ -711,7 +537,7 @@ Keep your introduction concise but informative."""
                     "rating": avg_rating
                 })
         
-        # Generate heatmap data
+        # Generate heatmap data (criterion ratings)
         heatmap_data = []
         
         for dimension in framework.get("dimensions", []):
@@ -766,6 +592,28 @@ Keep your introduction concise but informative."""
                 "evidence_count": dimension_evidence
             })
         
+        # Generate rating distribution data
+        rating_distribution = {}
+        for dimension in framework.get("dimensions", []):
+            dimension_id = dimension.get("id", "")
+            
+            if not dimension_id:
+                continue
+                
+            for criterion in dimension.get("criteria", []):
+                criterion_id = criterion.get("id", "")
+                
+                if not criterion_id:
+                    continue
+                    
+                # Get criterion assessment
+                assessment = self.context.get_criterion_assessment(dimension_id, criterion_id)
+                
+                if assessment and assessment.get("rating") is not None:
+                    rating = assessment.get("rating")
+                    rating_str = str(rating)
+                    rating_distribution[rating_str] = rating_distribution.get(rating_str, 0) + 1
+        
         # Create visualization data
         visualization_data = {
             "title": f"Visualization Data: {framework_name}",
@@ -773,10 +621,17 @@ Keep your introduction concise but informative."""
             "radar_chart": radar_data,
             "heatmap": heatmap_data,
             "evidence_distribution": evidence_distribution,
+            "rating_distribution": rating_distribution,
             "criteria_coverage": {
                 "assessed": overall_assessment.get("criteria_assessed", 0),
                 "total": overall_assessment.get("criteria_total", 1),
                 "percentage": overall_assessment.get("criteria_coverage", 0)
+            },
+            "key_metrics": {
+                "dimensions": len(radar_data),
+                "criteria_assessed": overall_assessment.get("criteria_assessed", 0),
+                "total_evidence": overall_assessment.get("total_evidence", 0),
+                "average_confidence": overall_assessment.get("average_confidence", 0) if self.include_confidence else None
             }
         }
         

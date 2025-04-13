@@ -496,3 +496,121 @@ class BaseAgent(ABC):
         # If we get here, all retries failed
         self.stop_timer()  # Stop the timer
         raise last_error
+
+# Add to BaseAgent
+
+    async def process_in_batches(self, items, batch_size, process_fn, *args, **kwargs):
+        """
+        Process a list of items in batches with progress tracking.
+        
+        Args:
+            items: List of items to process
+            batch_size: Size of each batch
+            process_fn: Async function to process each batch
+            *args, **kwargs: Additional arguments for process_fn
+            
+        Returns:
+            List of results from all batches
+        """
+        results = []
+        total_batches = (len(items) + batch_size - 1) // batch_size
+        
+        for i in range(0, len(items), batch_size):
+            batch = items[i:i+batch_size]
+            batch_num = i // batch_size + 1
+            
+            # Update progress
+            progress = batch_num / total_batches
+            self.update_progress(progress, f"Processing batch {batch_num}/{total_batches}")
+            
+            # Process batch
+            batch_results = await process_fn(batch, *args, **kwargs)
+            results.extend(batch_results)
+        
+        return results
+
+    async def run_parallel_tasks(self, tasks, max_concurrent=3):
+        """
+        Run multiple async tasks in parallel with concurrency control.
+        
+        Args:
+            tasks: List of async coroutines to execute
+            max_concurrent: Maximum number of concurrent tasks
+            
+        Returns:
+            List of results from all tasks
+        """
+        import asyncio
+        
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def run_with_semaphore(task_coro, task_index):
+            async with semaphore:
+                try:
+                    return await task_coro
+                except Exception as e:
+                    self.logger.error(f"Task {task_index} failed: {str(e)}")
+                    self.add_warning(f"Parallel task {task_index} failed: {str(e)}")
+                    return None
+        
+        # Wrap tasks with semaphore
+        wrapped_tasks = [
+            run_with_semaphore(task, i)
+            for i, task in enumerate(tasks)
+        ]
+        
+        # Run all tasks and gather results
+        results = await asyncio.gather(*wrapped_tasks, return_exceptions=False)
+        return results
+
+    def divide_work(self, items, num_groups):
+        """
+        Divide a list of items into balanced groups for parallel processing.
+        
+        Args:
+            items: List of items to divide
+            num_groups: Number of groups to create
+            
+        Returns:
+            List of groups, each containing a subset of items
+        """
+        groups = [[] for _ in range(num_groups)]
+        
+        for i, item in enumerate(items):
+            group_index = i % num_groups
+            groups[group_index].append(item)
+        
+        return groups
+
+    def aggregate_results(self, result_groups, aggregate_fn=None):
+        """
+        Aggregate results from multiple agents or tasks.
+        
+        Args:
+            result_groups: List of result groups to aggregate
+            aggregate_fn: Optional function to customize aggregation
+            
+        Returns:
+            Aggregated results
+        """
+        if aggregate_fn:
+            return aggregate_fn(result_groups)
+        
+        # Default aggregation logic for different result types
+        if all(isinstance(group, dict) for group in result_groups):
+            # Merge dictionaries
+            merged = {}
+            for group in result_groups:
+                merged.update(group)
+            return merged
+        
+        elif all(isinstance(group, list) for group in result_groups):
+            # Flatten lists
+            flattened = []
+            for group in result_groups:
+                flattened.extend(group)
+            return flattened
+        
+        # Default: return as is
+        return result_groups

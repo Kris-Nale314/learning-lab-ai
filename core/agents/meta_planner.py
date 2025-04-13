@@ -2,17 +2,15 @@
 Meta Planner Agent - Designs assessment strategies based on document and framework
 
 This module provides the MetaPlannerAgent class, which analyzes documents and 
-frameworks to design custom processing strategies for assessment.
+frameworks to design custom processing strategies for assessment, including
+parallel extraction capabilities.
 """
 
-import json, re, os
-import asyncio
+import json
 import time
 import logging
-from typing import Dict, Any, List, Optional, Tuple
-
-from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-from langchain.schema import HumanMessage, SystemMessage
+import re
+from typing import Dict, Any, List, Optional, Tuple, Set
 
 from core.agents.base import BaseAgent
 from core.context import AssessmentContext
@@ -27,9 +25,13 @@ class MetaPlannerAgent(BaseAgent):
     3. Designing an optimal processing strategy
     4. Configuring agent deployment and sequencing
     5. Creating custom instructions for each agent
+    6. Grouping criteria for parallel extraction
     
     This is the strategic "brain" of the assessment system.
     """
+    
+    DEFAULT_MAX_GROUP_SIZE = 3
+    DEFAULT_TOKEN_THRESHOLD = 10000
     
     def __init__(
         self,
@@ -48,7 +50,12 @@ class MetaPlannerAgent(BaseAgent):
             options: Configuration options
         """
         super().__init__(name, "planner", llm, context, options or {})
-        self.logger.info(f"{name} initialized")
+        
+        # Extract configuration options
+        self.max_group_size = self.options.get("max_group_size", self.DEFAULT_MAX_GROUP_SIZE)
+        self.token_threshold = self.options.get("token_threshold", self.DEFAULT_TOKEN_THRESHOLD)
+        
+        self.logger.info(f"{name} initialized with max_group_size={self.max_group_size}")
         
     async def process(self, document_preview_length: int = 5000) -> Dict[str, Any]:
         """
@@ -366,8 +373,6 @@ Your analysis should be concise but informative, focusing on aspects that would 
         
         self.logger.info(f"Document analysis parsing complete. Type: {document_analysis['document_type']}")
         return document_analysis
-
-
     
     async def _design_strategy(
         self, 
@@ -386,8 +391,238 @@ Your analysis should be concise but informative, focusing on aspects that would 
         """
         self.logger.info("Designing assessment strategy")
         
-        # Create prompt for strategy design
-        system_prompt = """You are an expert strategy designer for AI assessment systems. Your task is to design an optimal assessment strategy based on document and framework analysis. The strategy should specify which agents to deploy, how they should be configured, and how they should be sequenced."""
+        # 1. Analyze document size and complexity
+        document_size = len(self.context.document_text)
+        document_tokens = self.estimate_tokens(self.context.document_text)
+        document_complexity = self._estimate_complexity(document_analysis)
+        
+        # 2. Determine optimal chunking strategy
+        chunking_strategy = self._design_chunking_strategy(document_size, document_analysis)
+        
+        # 3. Group criteria for extraction
+        criteria_groups = self._group_criteria(document_size, document_complexity)
+        
+        # 4. Generate strategy with parallel extraction
+        strategy = await self._generate_parallel_strategy(
+            document_analysis, 
+            framework_analysis, 
+            criteria_groups,
+            chunking_strategy
+        )
+        
+        # 5. Record strategy design observation
+        self.record_observation("strategy_design", {
+            "strategy_type": strategy.get("strategy_type"),
+            "chunking_method": strategy.get("chunking_strategy", {}).get("method"),
+            "agent_count": len(strategy.get("agents", [])),
+            "extraction_groups": len(criteria_groups)
+        })
+        
+        return strategy
+    
+    def _estimate_complexity(self, document_analysis: Dict[str, Any]) -> str:
+        """
+        Estimate document complexity based on analysis.
+        
+        Args:
+            document_analysis: Document analysis results
+            
+        Returns:
+            Complexity level ("low", "medium", "high")
+        """
+        # Check language characteristics
+        language_chars = document_analysis.get("language_characteristics", [])
+        technical_terms = ["technical", "specialized", "jargon", "complex"]
+        technical_count = sum(1 for char in language_chars if any(term in char.lower() for term in technical_terms))
+        
+        # Check structure
+        structure = document_analysis.get("content_structure", "").lower()
+        structured_terms = ["section", "heading", "structured", "organized"]
+        is_structured = any(term in structure for term in structured_terms)
+        
+        # Check special considerations
+        special = document_analysis.get("special_considerations", [])
+        complex_terms = ["complex", "difficult", "challenging", "nuanced"]
+        complexity_mentions = sum(1 for s in special if any(term in s.lower() for term in complex_terms))
+        
+        # Determine complexity
+        if technical_count >= 2 or complexity_mentions >= 2:
+            return "high"
+        elif technical_count >= 1 or is_structured or complexity_mentions >= 1:
+            return "medium"
+        else:
+            return "low"
+    
+    def _design_chunking_strategy(
+        self, 
+        document_size: int, 
+        document_analysis: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Design optimal chunking strategy based on document.
+        
+        Args:
+            document_size: Document size in characters
+            document_analysis: Document analysis results
+            
+        Returns:
+            Chunking strategy
+        """
+        # Default configuration
+        strategy = {
+            "method": "fixed_size",
+            "size": 8000,
+            "overlap": 200,
+            "rationale": "Standard fixed-size chunking for general documents"
+        }
+        
+        # Adjust based on document size
+        if document_size < 15000:
+            # Small document - use a single large chunk
+            strategy["method"] = "fixed_size"
+            strategy["size"] = document_size
+            strategy["overlap"] = 0
+            strategy["rationale"] = "Document is small enough to process as a single chunk"
+        else:
+            # Check document structure
+            structure = document_analysis.get("content_structure", "").lower()
+            
+            if "dialogue" in structure or "transcript" in structure:
+                # Dialogue or transcript - use paragraph-based chunking
+                strategy["method"] = "paragraph"
+                strategy["size"] = 50  # Number of paragraphs per chunk
+                strategy["overlap"] = 5
+                strategy["rationale"] = "Dialogue-based content with natural paragraph breaks"
+            elif "section" in structure or "heading" in structure:
+                # Sectioned document - use section-based chunking
+                strategy["method"] = "semantic"
+                strategy["size"] = 10000
+                strategy["overlap"] = 500
+                strategy["rationale"] = "Document has clear section structure for semantic chunking"
+            else:
+                # Default to fixed size with size based on document length
+                chunk_size = min(10000, max(4000, document_size // 5))
+                strategy["method"] = "fixed_size"
+                strategy["size"] = chunk_size
+                strategy["overlap"] = chunk_size // 10
+                strategy["rationale"] = f"Standard chunking with size optimized for document length ({document_size} chars)"
+        
+        return strategy
+    
+    def _group_criteria(
+        self, 
+        document_size: int, 
+        document_complexity: str
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        Group criteria for parallel extraction.
+        
+        Args:
+            document_size: Document size in characters
+            document_complexity: Document complexity level
+            
+        Returns:
+            List of criteria groups
+        """
+        framework = self.context.framework
+        
+        # Collect all criteria with dimension info
+        all_criteria = []
+        
+        for dimension in framework.get("dimensions", []):
+            dimension_id = dimension.get("id", "")
+            dimension_name = dimension.get("name", "")
+            
+            if not dimension_id:
+                continue
+                
+            for criterion in dimension.get("criteria", []):
+                criterion_id = criterion.get("id", "")
+                criterion_name = criterion.get("name", "")
+                
+                if not criterion_id:
+                    continue
+                    
+                all_criteria.append({
+                    "dimension_id": dimension_id,
+                    "dimension_name": dimension_name,
+                    "criterion_id": criterion_id,
+                    "criterion_name": criterion_name,
+                    "criterion_question": criterion.get("question", ""),
+                    "criterion_data": criterion
+                })
+        
+        # Determine grouping strategy based on document size and complexity
+        max_group_size = self.max_group_size
+        
+        if document_size < self.token_threshold:
+            # Small document - use one group for all criteria
+            return [all_criteria]
+        
+        # For larger documents, group by dimension first, then split if needed
+        dimension_groups = {}
+        
+        for criterion in all_criteria:
+            dimension_id = criterion.get("dimension_id")
+            if dimension_id not in dimension_groups:
+                dimension_groups[dimension_id] = []
+            dimension_groups[dimension_id].append(criterion)
+        
+        # Create final groups
+        criterion_groups = []
+        
+        for dimension_id, criteria in dimension_groups.items():
+            # If dimension has more than max criteria, split it
+            if len(criteria) > max_group_size:
+                for i in range(0, len(criteria), max_group_size):
+                    group = criteria[i:i + max_group_size]
+                    criterion_groups.append(group)
+            else:
+                criterion_groups.append(criteria)
+        
+        # If we have too many small groups, consolidate
+        if document_complexity == "low" and len(criterion_groups) > 5:
+            consolidated_groups = []
+            current_group = []
+            
+            for group in criterion_groups:
+                if len(current_group) + len(group) <= max_group_size:
+                    current_group.extend(group)
+                else:
+                    if current_group:
+                        consolidated_groups.append(current_group)
+                    current_group = group
+            
+            if current_group:
+                consolidated_groups.append(current_group)
+            
+            criterion_groups = consolidated_groups
+        
+        return criterion_groups
+    
+    async def _generate_parallel_strategy(
+        self,
+        document_analysis: Dict[str, Any],
+        framework_analysis: Dict[str, Any],
+        criteria_groups: List[List[Dict[str, Any]]],
+        chunking_strategy: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Generate assessment strategy with parallel extraction.
+        
+        Args:
+            document_analysis: Document analysis results
+            framework_analysis: Framework analysis results
+            criteria_groups: Grouped criteria for parallel extraction
+            chunking_strategy: Chunking strategy
+            
+        Returns:
+            Complete assessment strategy
+        """
+        # Create system prompt for strategy generation
+        system_prompt = """You are an expert strategy designer for AI assessment systems. 
+        Your task is to design an optimal assessment strategy based on document and framework analysis. 
+        The strategy should specify which agents to deploy, how they should be configured, and how they should be sequenced."""
         
         # Get user options if available
         user_options = self.context.options.get("user_options", {})
@@ -396,69 +631,78 @@ Your analysis should be concise but informative, focusing on aspects that would 
         if user_options:
             user_preferences_text = "USER PREFERENCES:\n"
             for key, value in user_options.items():
-                user_preferences_text += f"- {key}: {value}\n"
+                if value is not None:
+                    user_preferences_text += f"- {key}: {value}\n"
         
-        # Use a raw string for the JSON schema part to avoid f-string issues
+        # Collect group information for the prompt
+        groups_text = ""
+        for i, group in enumerate(criteria_groups):
+            groups_text += f"Group {i+1}:\n"
+            for criterion in group:
+                groups_text += f"- {criterion['dimension_name']} / {criterion['criterion_name']}\n"
+            groups_text += "\n"
+        
+        # Create human prompt for strategy design
         json_schema = r'''```json
-    {
-    "strategy_type": "string",
-    "chunking_strategy": {
-        "method": "string",
-        "size": number,
-        "overlap": number,
-        "rationale": "string"
-    },
-    "agents": [
-        {
-        "agent_type": "string",
-        "configuration": object,
-        "instructions": "string",
-        "inputs": ["string"],
-        "outputs": ["string"]
-        }
-    ],
-    "processing_sequence": ["string"],
-    "token_allocation": {
-        "total_estimated": number,
-        "by_agent": object
-    },
+{
+  "strategy_type": "string",
+  "chunking_strategy": {
+    "method": "string",
+    "size": "number",
+    "overlap": "number",
     "rationale": "string"
+  },
+  "agents": [
+    {
+      "agent_type": "string",
+      "configuration": {},
+      "instructions": "string",
+      "inputs": ["string"],
+      "outputs": ["string"]
     }
-    ```'''
+  ],
+  "processing_sequence": ["string"],
+  "token_allocation": {
+    "total_estimated": "number",
+    "by_agent": {}
+  },
+  "rationale": "string"
+}
+```'''
         
-        # Combine all parts into the final prompt
         human_prompt = f"""Design an optimal assessment strategy based on the following document and framework analysis.
 
-    DOCUMENT ANALYSIS:
-    {json.dumps(document_analysis, indent=2)}
+DOCUMENT ANALYSIS:
+{json.dumps(document_analysis, indent=2)}
 
-    FRAMEWORK ANALYSIS:
-    {json.dumps(framework_analysis, indent=2)}
+FRAMEWORK ANALYSIS:
+{json.dumps(framework_analysis, indent=2)}
 
-    {user_preferences_text}
+CRITERIA GROUPS FOR PARALLEL EXTRACTION:
+{groups_text}
 
-    Your strategy should include:
+RECOMMENDED CHUNKING STRATEGY:
+{json.dumps(chunking_strategy, indent=2)}
 
-    1. Chunking strategy (method, size, overlap)
-    2. Agent deployment plan (which agents to use and how to configure them)
-    3. Processing sequence (order of operations)
-    4. Custom instructions for each agent
-    5. Reasoning for your strategy choices
+{user_preferences_text}
 
-    Available agents:
-    - Extractor: Extracts content related to framework dimensions and criteria
-    - Evaluator: Evaluates criteria based on evidence
-    - Reporter: Generates assessment reports
+Your strategy should include:
 
-    Available chunking methods:
-    - fixed_size: Splits by character/token count
-    - paragraph: Splits by paragraph boundaries
-    - semantic: Splits by topic/semantic boundaries
+1. Chunking strategy (use the recommended one unless you have a strong reason to modify it)
+2. Agent deployment plan with one extractor per criteria group and instructions for each
+3. Processing sequence (order of operations)
+4. Custom instructions for each agent
+5. Reasoning for your strategy choices
 
-    Please provide your strategy as a structured JSON object with the following schema:
+Available agents:
+- Extractor: Extracts content related to framework dimensions and criteria
+- Evaluator: Evaluates criteria based on evidence
+- Reporter: Generates assessment reports
 
-    {json_schema}"""
+Please provide your strategy as a structured JSON object with the following schema:
 
+{json_schema}"""
+        
         # Call LLM for strategy design
         try:
             strategy_json, _ = await self._safe_llm_call(
@@ -467,30 +711,78 @@ Your analysis should be concise but informative, focusing on aspects that would 
                 system_prompt=system_prompt,
                 description="assessment strategy",
                 temperature=0.4,
-                max_tokens=2000
+                max_tokens=3000
             )
             
             # Ensure the strategy has all required sections
             strategy = self._validate_strategy(strategy_json)
             
-            # Record observation
-            self.record_observation("strategy_design", {
-                "strategy_type": strategy.get("strategy_type"),
-                "chunking_method": strategy.get("chunking_strategy", {}).get("method"),
-                "agent_count": len(strategy.get("agents", []))
-            })
+            # Ensure agent naming is consistent
+            strategy = self._normalize_agent_names(strategy)
             
             return strategy
             
         except Exception as e:
-            self.logger.error(f"Error generating assessment strategy: {str(e)}", exc_info=True)
+            self.logger.error(f"Error generating parallel assessment strategy: {str(e)}", exc_info=True)
             
             # Create fallback strategy
-            fallback_strategy = self._create_fallback_strategy(document_analysis, framework_analysis)
+            fallback_strategy = self._create_fallback_strategy(
+                document_analysis, 
+                framework_analysis, 
+                criteria_groups,
+                chunking_strategy
+            )
             
             self.add_warning(f"Used fallback strategy due to error: {str(e)}")
             
             return fallback_strategy
+    
+    def _normalize_agent_names(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Ensure agent names are consistent throughout strategy.
+        
+        Args:
+            strategy: Assessment strategy
+            
+        Returns:
+            Normalized strategy
+        """
+        # Create a copy to avoid modifying the original
+        normalized = strategy.copy()
+        
+        # Normalize agent types in agents list
+        if "agents" in normalized:
+            for agent in normalized["agents"]:
+                if "agent_type" in agent:
+                    agent_type = agent["agent_type"].lower()
+                    
+                    # Standardize names
+                    if agent_type in ["extractor", "extractagent", "extract"]:
+                        agent["agent_type"] = "extractor"
+                    elif agent_type in ["evaluator", "evaluateagent", "evaluate"]:
+                        agent["agent_type"] = "evaluator"
+                    elif agent_type in ["reporter", "reportagent", "report"]:
+                        agent["agent_type"] = "reporter"
+        
+        # Normalize processing sequence
+        if "processing_sequence" in normalized:
+            normalized_sequence = []
+            for agent_type in normalized["processing_sequence"]:
+                agent_type = agent_type.lower()
+                
+                # Standardize names
+                if agent_type in ["extractor", "extractagent", "extract"]:
+                    normalized_sequence.append("extractor")
+                elif agent_type in ["evaluator", "evaluateagent", "evaluate"]:
+                    normalized_sequence.append("evaluator")
+                elif agent_type in ["reporter", "reportagent", "report"]:
+                    normalized_sequence.append("reporter")
+                else:
+                    normalized_sequence.append(agent_type)
+            
+            normalized["processing_sequence"] = normalized_sequence
+        
+        return normalized
     
     def _validate_strategy(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -510,15 +802,15 @@ Your analysis should be concise but informative, focusing on aspects that would 
         for key in required_keys:
             if key not in validated:
                 if key == "strategy_type":
-                    validated[key] = "standard"
+                    validated[key] = "parallel_extraction"
                 elif key == "chunking_strategy":
-                    validated[key] = {"method": "fixed_size", "size": 2000, "overlap": 200, "rationale": "Default chunking strategy"}
+                    validated[key] = {"method": "fixed_size", "size": 8000, "overlap": 200, "rationale": "Default chunking strategy"}
                 elif key == "agents":
                     validated[key] = []
                 elif key == "processing_sequence":
                     validated[key] = []
                 elif key == "rationale":
-                    validated[key] = "Default assessment strategy"
+                    validated[key] = "Default assessment strategy with parallel extraction"
         
         # Ensure chunking strategy has required fields
         chunking_keys = ["method", "size", "overlap", "rationale"]
@@ -527,7 +819,7 @@ Your analysis should be concise but informative, focusing on aspects that would 
                 if key == "method":
                     validated["chunking_strategy"][key] = "fixed_size"
                 elif key == "size":
-                    validated["chunking_strategy"][key] = 2000
+                    validated["chunking_strategy"][key] = 8000
                 elif key == "overlap":
                     validated["chunking_strategy"][key] = 200
                 elif key == "rationale":
@@ -566,7 +858,7 @@ Your analysis should be concise but informative, focusing on aspects that would 
         
         # Adjust total based on document size and chunking
         chunking = strategy.get("chunking_strategy", {})
-        chunk_size = chunking.get("size", 2000)
+        chunk_size = chunking.get("size", 8000)
         chunk_overlap = chunking.get("overlap", 200)
         
         # Estimate number of chunks
@@ -575,32 +867,56 @@ Your analysis should be concise but informative, focusing on aspects that would 
         else:
             chunk_count = 1
         
+        # Count extractors
+        extractor_count = sum(1 for agent in strategy.get("agents", []) 
+                           if agent.get("agent_type", "").lower() == "extractor")
+        
         # Allocate tokens by agent
+        total_tokens = 0
+        by_agent = {}
+        
         for agent in strategy.get("agents", []):
-            agent_type = agent.get("agent_type")
+            agent_type = agent.get("agent_type", "").lower()
             
             if agent_type == "extractor":
-                # Extractors process chunks directly
-                agent_tokens = chunk_count * 1000  # Rough estimate per chunk
+                # Extractors process chunks
+                tokens_per_extractor = (document_tokens // max(1, extractor_count)) * 1.2
+                agent_tokens = int(tokens_per_extractor)
+                by_agent[agent_type] = by_agent.get(agent_type, 0) + agent_tokens
+                total_tokens += agent_tokens
+                
             elif agent_type == "evaluator":
-                # Evaluators process extracted content
-                agent_tokens = document_tokens * 0.3  # Assume 30% of document tokens
+                # Evaluators process extracted evidence
+                agent_tokens = int(document_tokens * 0.3)
+                by_agent[agent_type] = agent_tokens
+                total_tokens += agent_tokens
+                
             elif agent_type == "reporter":
-                # Reporters create summaries
-                agent_tokens = document_tokens * 0.2  # Assume 20% of document tokens
+                # Reporters create reports
+                agent_tokens = int(document_tokens * 0.2)
+                by_agent[agent_type] = agent_tokens
+                total_tokens += agent_tokens
+                
             else:
-                # Default estimate
-                agent_tokens = document_tokens * 0.1
-            
-            allocation["by_agent"][agent_type] = int(agent_tokens)
-            allocation["total_estimated"] += int(agent_tokens)
+                # Unknown agent type
+                agent_tokens = int(document_tokens * 0.1)
+                by_agent[agent_type] = agent_tokens
+                total_tokens += agent_tokens
+        
+        # Create allocation dictionary
+        allocation = {
+            "total_estimated": total_tokens,
+            "by_agent": by_agent
+        }
         
         return allocation
     
     def _create_fallback_strategy(
         self, 
         document_analysis: Dict[str, Any], 
-        framework_analysis: Dict[str, Any]
+        framework_analysis: Dict[str, Any],
+        criteria_groups: List[List[Dict[str, Any]]],
+        chunking_strategy: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Create a fallback strategy if strategy generation fails.
@@ -608,75 +924,93 @@ Your analysis should be concise but informative, focusing on aspects that would 
         Args:
             document_analysis: Document analysis results
             framework_analysis: Framework analysis results
+            criteria_groups: Grouped criteria for parallel extraction
+            chunking_strategy: Chunking strategy
             
         Returns:
             Fallback assessment strategy
         """
         self.logger.info("Creating fallback assessment strategy")
         
-        # Determine chunking method based on document type
-        doc_type = document_analysis.get("document_type", "unknown").lower()
-        chunking_method = "fixed_size"
-        chunk_size = 2000
-        chunk_overlap = 200
+        # Create extractor agents for each criteria group
+        extractor_agents = []
+        for i, group in enumerate(criteria_groups):
+            # Extract criteria and dimension IDs for instructions
+            criteria_ids = [criterion["criterion_id"] for criterion in group]
+            dimension_ids = list(set(criterion["dimension_id"] for criterion in group))
+            
+            # Create instructions
+            criteria_text = "\n".join([
+                f"- {criterion['dimension_name']} / {criterion['criterion_name']}: {criterion['criterion_question']}"
+                for criterion in group
+            ])
+            
+            instructions = f"""Extract evidence related to the following criteria:
+
+{criteria_text}
+
+For each piece of relevant evidence, identify:
+1. Which criterion it relates to
+2. How strongly it supports or addresses the criterion
+3. The specific text from the document that provides the evidence"""
+            
+            # Create extractor configuration
+            extractor_config = {
+                "agent_type": "extractor",
+                "configuration": {
+                    "extraction_type": "direct",
+                    "batch_size": 1,
+                    "min_confidence": 0.7,
+                    "criteria_ids": criteria_ids,
+                    "dimension_ids": dimension_ids
+                },
+                "instructions": instructions,
+                "inputs": ["document_chunks"],
+                "outputs": [f"extracted_evidence_group_{i+1}"]
+            }
+            
+            extractor_agents.append(extractor_config)
         
-        if "transcript" in doc_type or "dialogue" in doc_type:
-            chunking_method = "paragraph"
-            chunk_size = 3000
-            chunk_overlap = 300
-        elif "report" in doc_type or "article" in doc_type:
-            chunking_method = "semantic"
-            chunk_size = 2500
-            chunk_overlap = 250
+        # Create evaluator agent
+        evaluator_config = {
+            "agent_type": "evaluator",
+            "configuration": {
+                "evaluation_type": "evidence-based",
+                "confidence_threshold": 0.6,
+                "infer_missing": True
+            },
+            "instructions": "Evaluate all criteria based on extracted evidence. Where evidence is strong, provide detailed rationales. Where evidence is missing or weak, indicate lower confidence.",
+            "inputs": ["extracted_evidence_group_1", "extracted_evidence_group_2", "extracted_evidence_group_3"],
+            "outputs": ["criteria_assessments"]
+        }
+        
+        # Create reporter agent
+        reporter_config = {
+            "agent_type": "reporter",
+            "configuration": {
+                "report_type": "comprehensive",
+                "include_evidence": True
+            },
+            "instructions": "Generate a comprehensive assessment report with evidence links and confidence ratings.",
+            "inputs": ["criteria_assessments"],
+            "outputs": ["assessment_report"]
+        }
+        
+        # Combine agents
+        all_agents = extractor_agents + [evaluator_config, reporter_config]
+        
+        # Create processing sequence
+        extractor_names = ["extractor"] * len(extractor_agents)
+        processing_sequence = extractor_names + ["evaluator", "reporter"]
         
         # Create fallback strategy
         fallback_strategy = {
-            "strategy_type": "fallback",
-            "chunking_strategy": {
-                "method": chunking_method,
-                "size": chunk_size,
-                "overlap": chunk_overlap,
-                "rationale": "Fallback chunking strategy based on document type"
-            },
-            "agents": [
-                {
-                    "agent_type": "extractor",
-                    "configuration": {
-                        "extraction_type": "direct",
-                        "batch_size": 10,
-                        "min_confidence": 0.7
-                    },
-                    "instructions": "Extract content related to framework dimensions and criteria, focusing on direct evidence.",
-                    "inputs": ["document_chunks"],
-                    "outputs": ["extracted_content"]
-                },
-                {
-                    "agent_type": "evaluator",
-                    "configuration": {
-                        "evaluation_type": "evidence-based",
-                        "confidence_threshold": 0.6
-                    },
-                    "instructions": "Evaluate criteria based on extracted evidence, providing clear rationales for assessments.",
-                    "inputs": ["extracted_content", "framework"],
-                    "outputs": ["criteria_assessments"]
-                },
-                {
-                    "agent_type": "reporter",
-                    "configuration": {
-                        "report_type": "comprehensive",
-                        "include_evidence": True
-                    },
-                    "instructions": "Generate a comprehensive assessment report with evidence links and confidence ratings.",
-                    "inputs": ["criteria_assessments", "framework"],
-                    "outputs": ["assessment_report"]
-                }
-            ],
-            "processing_sequence": ["extractor", "evaluator", "reporter"],
-            "token_allocation": {
-                "total_estimated": 0,
-                "by_agent": {}
-            },
-            "rationale": "Fallback strategy using standard processing sequence and configuration."
+            "strategy_type": "parallel_extraction",
+            "chunking_strategy": chunking_strategy,
+            "agents": all_agents,
+            "processing_sequence": processing_sequence,
+            "token_allocation": {},
+            "rationale": "Fallback strategy with parallel extraction for each criteria group, followed by evaluation and reporting."
         }
         
         # Estimate token allocation
