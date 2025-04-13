@@ -2,7 +2,7 @@
 Framework Assessment Workbench - Main Application
 
 This is the main entry point for the Framework Assessment Workbench application.
-It sets up the environment and initializes the Streamlit application.
+It sets up the environment and initializes the Streamlit application with enhanced UI components.
 """
 
 import os
@@ -12,11 +12,22 @@ import streamlit as st
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Set page config first (must be the first Streamlit command)
+st.set_page_config(
+    page_title="Framework Assessment Workbench",
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # Ensure utils is in path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import path utilities
 from utils import path_utils
+from utils import ui_components
+from utils import ui_styles
+from utils import ui_progress
 
 # Configure logging
 def setup_logging():
@@ -75,13 +86,8 @@ def load_environment():
 # Initialize the application
 def init_app():
     """Initialize the application environment."""
-    # Set up page config
-    st.set_page_config(
-        page_title="Framework Assessment Workbench",
-        page_icon="🧠",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    # Apply custom UI styles
+    ui_styles.apply_styles()
     
     # Initialize session state if needed
     if "initialized" not in st.session_state:
@@ -138,7 +144,79 @@ def init_app():
         # Add version info
         st.sidebar.markdown("---")
         st.sidebar.caption("Framework Assessment Workbench")
-        st.sidebar.caption("Version 0.1.0")
+        st.sidebar.caption("Version 0.2.0")
+
+# Display homepage content
+def display_homepage():
+    """Display the main homepage content."""
+    st.title("🧠 Learning Lab AI: Framework Assessment Workbench")
+    st.markdown(
+        """
+        > "AI is a tool for decision-making. It's also a product of decisions."
+        
+        ## 🔍 What is this?
+        
+        The Framework Assessment Workbench is an experimental laboratory for exploring how AI 
+        can transform unstructured documents into structured insights. It demonstrates advanced 
+        document intelligence techniques focused on **framework-guided assessment** - evaluating 
+        content against structured criteria you define.
+        
+        ## 💼 How to Use
+        
+        1. Navigate to the **Framework Assessment** page to assess documents against frameworks
+        2. Use the **Framework Builder** page to create or upload an assessment framework
+        3. Explore results in the **Results Explorer**
+        4. Experiment with different strategies in the **Experiment Lab**
+        
+        ## 🚀 Getting Started
+        
+        Use the sidebar navigation to access the different modules of the workbench.
+        """
+    )
+    
+    # Create metrics with the new UI components
+    metrics = [
+        {"label": "Multi-Agent Extractors", "value": "✅"},
+        {"label": "LLM-Powered Analysis", "value": "✅"},
+        {"label": "Structured Evidence Collection", "value": "✅"},
+    ]
+    
+    ui_components.metric_row(metrics)
+    
+    # Create feature cards
+    st.markdown("## ✨ Key Features")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        with ui_components.card_container("Dynamic Assessment Planning"):
+            st.markdown(
+                """
+                Rather than using a fixed pipeline, each assessment begins with a Meta Planner that designs a custom 
+                processing strategy based on the document and framework.
+                """
+            )
+        ui_components.end_card_container()
+        
+    with col2:
+        with ui_components.card_container("Configurable Agent Deployment"):
+            st.markdown(
+                """
+                Agents are configured and deployed according to the strategy, with customized instructions 
+                for each assessment to optimize analysis.
+                """
+            )
+        ui_components.end_card_container()
+        
+    with col3:
+        with ui_components.card_container("Interactive Exploration"):
+            st.markdown(
+                """
+                Review and modify assessment strategies, comparing different approaches to see what works best
+                for your specific document types and frameworks.
+                """
+            )
+        ui_components.end_card_container()
 
 # Main function
 def main():
@@ -157,30 +235,7 @@ def main():
     init_app()
     
     # Display homepage
-    st.title("🧠 Learning Lab AI: Framework Assessment Workbench")
-    st.markdown(
-        """
-        > "AI is a tool for decision-making. It's also a product of decisions."
-        
-        ## 🔍 What is this?
-        
-        The Framework Assessment Workbench is an experimental laboratory for exploring how AI 
-        can transform unstructured documents into structured insights. It demonstrates advanced 
-        document intelligence techniques focused on **framework-guided assessment** - evaluating 
-        content against structured criteria you define.
-        
-        ## 💼 How to Use
-        
-        1. Navigate to the **Framework Builder** page to create or upload an assessment framework
-        2. Go to the **Document Assessment** page to upload and assess documents
-        3. Explore results in the **Results Explorer**
-        4. Experiment with different strategies in the **Experiment Lab**
-        
-        ## 🚀 Getting Started
-        
-        Use the sidebar navigation to access the different modules of the workbench.
-        """
-    )
+    display_homepage()
     
     # Check for API key
     if not env_loaded:

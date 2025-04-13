@@ -8,11 +8,23 @@ The Framework Assessment Workbench is an experimental laboratory for exploring h
 
 Unlike traditional document analysis tools, this workbench is designed to experiment with different assessment strategies and measure their effectiveness. It's a platform for exploring the question: "What's the most effective way to extract and evaluate structured insights from unstructured text?"
 
-## 💡 Core Belief
+## 💡 Core Beliefs
 
 We believe that AI tools should enhance human decision-making, not replace it. The most powerful applications happen when users can precisely articulate what they're looking for and thoughtfully evaluate AI-generated insights.
 
 The true challenge isn't just building more powerful AI - it's designing systems that help users become more skilled "wishers" who can clearly define what they want and critically evaluate what they receive.
+
+### Decision Intelligence at the Core
+
+The Framework Assessment Workbench embodies the principles of decision intelligence:
+
+1. **Strategic Value Articulation**: Instead of implementing AI for its own sake, we focus on clearly articulating what value we want to extract from documents.
+
+2. **Context-Aware Processing**: Our multi-agent architecture adapts to the specific context of each assessment rather than applying one-size-fits-all approaches.
+
+3. **Thoughtful Interaction**: The system encourages users to carefully define frameworks and critically evaluate results, avoiding the pitfall of uncritically trusting AI outputs.
+
+4. **Precision in Expression**: Our framework-building capabilities help users precisely communicate assessment criteria to AI systems.
 
 ## ⚙️ How It Works
 
@@ -80,9 +92,9 @@ learning-lab-ai/
 ├── README.md                  # Project readme
 ├── core/
 │   ├── context.py             # Assessment context with collaboration capabilities
-│   ├── orchestrator.py        # Strategy orchestration engine
+│   ├── execution.py           # Strategy execution engine
 │   ├── agents/                # Agent implementations
-│   │   ├── base_agent.py      # Base agent class
+│   │   ├── base.py            # Base agent class
 │   │   ├── meta_planner.py    # Strategy planning agent
 │   │   ├── extractor.py       # Configurable extraction agent  
 │   │   ├── evaluator.py       # Configurable evaluation agent
@@ -105,23 +117,32 @@ learning-lab-ai/
 ├── utils/                     # Utility functions
 │   ├── document_utils.py      # Document handling utilities
 │   ├── visualization.py       # Visualization helpers
-│   ├── streamlit_helpers.py   # Streamlit UI components
-│   └── experiment.py          # Experiment utilities
+│   ├── ui_components.py       # Streamlit UI components
+│   ├── ui_styles.py           # UI styling helpers
+│   ├── ui_results.py          # Results display utilities
+│   ├── ui_progress.py         # Progress tracking components
+│   └── path_utils.py          # File path management
 ├── docs/                      # Documentation
 │   ├── images/                # Architecture diagrams, logos
 │   ├── concepts.md            # Concept explanations
 │   └── usage.md               # Usage documentation
 ├── tests/                     # Test suite
 └── pages/                     # Streamlit pages
-    ├── 01_Framework_Builder.py  # Framework definition
-    ├── 02_Document_Assessment.py # Assessment execution
+    ├── 01_Assess_Framework.py   # Main assessment page
+    ├── 02_Framework_Builder.py  # Framework definition
     ├── 03_Results_Explorer.py   # Results visualization
     └── 04_Experiment_Lab.py     # Experimentation
 ```
 
 ## 🔬 What You Can Explore
 
-The workbench allows you to experiment with different approaches to framework assessment:
+The workbench allows you to experiment with different approaches to framework assessment, focusing on the decision intelligence aspects of AI system design:
+
+### From Buzzwords to Business Strategy
+
+- Define frameworks that translate business goals into measurable criteria
+- Experiment with different ways to articulate assessment criteria for AI
+- Test how variations in framework structure impact assessment quality
 
 ### Extraction Strategies
 - Compare direct vs. semantic extraction techniques
@@ -150,6 +171,30 @@ The workbench allows you to experiment with different approaches to framework as
 - **Policy Compliance**: Check documents against regulatory requirements
 - **Research Quality Evaluation**: Assess papers against methodological standards
 - **Project Documentation Review**: Identify risks and gaps in project documentation
+
+## 🔑 Key Principles for AI System Design
+
+The Framework Assessment Workbench embodies several key principles that can be applied to any AI system design:
+
+### 1. Know When to Use AI
+
+Not every problem requires AI. The workbench helps users determine when traditional automation (via explicit rules) is sufficient and when AI approaches are needed for problems too complex to solve with conventional methods.
+
+### 2. Become a Skilled "Wisher"
+
+The success of AI systems depends heavily on how well humans can articulate what they want. Our framework-building capabilities help users develop this skill by providing structure for expressing evaluation criteria.
+
+### 3. Be an "Author of Meaning"
+
+With generative AI systems capable of producing infinite possible outputs, the workbench helps users define what "good" looks like for their specific needs and develop metrics to evaluate success.
+
+### 4. Inject Thoughtfulness
+
+The system encourages critical evaluation of AI outputs by tracking confidence scores, providing evidence traceability, and visualizing assessment metrics, helping users avoid the trap of uncritical trust.
+
+### 5. Prioritize Value Over Technology
+
+The workbench focuses on the business value of insights rather than the technology itself, demonstrating how AI can be applied to previously "impossible" document analysis problems when value is clearly articulated.
 
 ## 🤝 Contributing
 

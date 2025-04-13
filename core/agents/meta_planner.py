@@ -1,9 +1,9 @@
 """
-Meta Planner Agent - Designs assessment strategies based on document and framework
+Enhanced Meta Planner Agent - Designs assessment strategies and defines output schema
 
 This module provides the MetaPlannerAgent class, which analyzes documents and 
 frameworks to design custom processing strategies for assessment, including
-parallel extraction capabilities.
+parallel extraction capabilities and output schema definition.
 """
 
 import json
@@ -17,7 +17,7 @@ from core.context import AssessmentContext
 
 class MetaPlannerAgent(BaseAgent):
     """
-    Designs custom assessment strategies based on document and framework analysis.
+    Designs custom assessment strategies and output schemas based on document and framework analysis.
     
     The Meta Planner is responsible for:
     1. Analyzing document content and structure
@@ -26,6 +26,7 @@ class MetaPlannerAgent(BaseAgent):
     4. Configuring agent deployment and sequencing
     5. Creating custom instructions for each agent
     6. Grouping criteria for parallel extraction
+    7. Defining the output schema for structured assessment results
     
     This is the strategic "brain" of the assessment system.
     """
@@ -54,6 +55,7 @@ class MetaPlannerAgent(BaseAgent):
         # Extract configuration options
         self.max_group_size = self.options.get("max_group_size", self.DEFAULT_MAX_GROUP_SIZE)
         self.token_threshold = self.options.get("token_threshold", self.DEFAULT_TOKEN_THRESHOLD)
+        self.one_criterion_per_extractor = self.options.get("one_criterion_per_extractor", True)
         
         self.logger.info(f"{name} initialized with max_group_size={self.max_group_size}")
         
@@ -83,7 +85,11 @@ class MetaPlannerAgent(BaseAgent):
             # 4. Design assessment strategy
             assessment_strategy = await self._design_strategy(document_analysis, framework_analysis)
             
-            # 5. Store strategy in context
+            # 5. Define output schema
+            output_schema = self._define_output_schema(framework_analysis)
+            assessment_strategy["output_schema"] = output_schema
+            
+            # 6. Store strategy in context
             self.context.set_planning_data(assessment_strategy)
             
             # Record processing time
@@ -94,7 +100,8 @@ class MetaPlannerAgent(BaseAgent):
             self.record_observation("strategy_created", {
                 "strategy_type": assessment_strategy.get("strategy_type"),
                 "agent_count": len(assessment_strategy.get("agents", [])),
-                "time_taken": elapsed_time
+                "time_taken": elapsed_time,
+                "output_schema_defined": True
             })
             
             return assessment_strategy
@@ -151,8 +158,13 @@ class MetaPlannerAgent(BaseAgent):
         criteria_counts = {}
         total_criteria = 0
         
+        # Collect detailed dimension and criteria information
+        dimensions_info = []
+        
         for dimension in dimensions:
             dimension_id = dimension.get("id", "")
+            dimension_name = dimension.get("name", "")
+            
             if not dimension_id:
                 continue
                 
@@ -161,10 +173,34 @@ class MetaPlannerAgent(BaseAgent):
             
             criteria_counts[dimension_id] = criteria_count
             total_criteria += criteria_count
+            
+            # Collect criteria details
+            criteria_info = []
+            for criterion in criteria:
+                criterion_id = criterion.get("id", "")
+                criterion_name = criterion.get("name", "")
+                scoring_method = criterion.get("scoring_method", "scale_1_5")
+                
+                criteria_info.append({
+                    "id": criterion_id,
+                    "name": criterion_name,
+                    "scoring_method": scoring_method,
+                    "scoring_definitions": criterion.get("scoring_definitions", {})
+                })
+            
+            dimensions_info.append({
+                "id": dimension_id,
+                "name": dimension_name,
+                "criteria_count": criteria_count,
+                "criteria": criteria_info
+            })
         
         # Get rating scale if available
         rating_scale = framework.get("rating_scale", {})
         rating_levels = rating_scale.get("levels", [])
+        
+        # Get scoring methods
+        scoring_methods = framework.get("scoring_methods", {})
         
         # Create framework analysis
         framework_analysis = {
@@ -175,7 +211,8 @@ class MetaPlannerAgent(BaseAgent):
             "criteria_by_dimension": criteria_counts,
             "has_rating_scale": bool(rating_levels),
             "rating_levels_count": len(rating_levels),
-            "scoring_methods": framework.get("scoring_methods", {})
+            "scoring_methods": scoring_methods,
+            "dimensions": dimensions_info
         }
         
         # Record observation
@@ -400,7 +437,12 @@ Your analysis should be concise but informative, focusing on aspects that would 
         chunking_strategy = self._design_chunking_strategy(document_size, document_analysis)
         
         # 3. Group criteria for extraction
-        criteria_groups = self._group_criteria(document_size, document_complexity)
+        if self.one_criterion_per_extractor:
+            # Create a group for each criterion (one criterion per extractor)
+            criteria_groups = self._group_criteria_one_per_extractor(framework_analysis)
+        else:
+            # Group criteria based on document size and complexity
+            criteria_groups = self._group_criteria(document_size, document_complexity)
         
         # 4. Generate strategy with parallel extraction
         strategy = await self._generate_parallel_strategy(
@@ -509,6 +551,45 @@ Your analysis should be concise but informative, focusing on aspects that would 
         
         return strategy
     
+    def _group_criteria_one_per_extractor(
+        self,
+        framework_analysis: Dict[str, Any]
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        Group criteria with one criterion per group for maximum specialization.
+        
+        Args:
+            framework_analysis: Framework analysis results
+            
+        Returns:
+            List of criteria groups (one criterion per group)
+        """
+        criteria_groups = []
+        
+        for dimension in framework_analysis.get("dimensions", []):
+            dimension_id = dimension.get("id", "")
+            dimension_name = dimension.get("name", "")
+            
+            for criterion in dimension.get("criteria", []):
+                criterion_id = criterion.get("id", "")
+                criterion_name = criterion.get("name", "")
+                
+                if not criterion_id:
+                    continue
+                
+                # Create a group with just this one criterion
+                criteria_groups.append([{
+                    "dimension_id": dimension_id,
+                    "dimension_name": dimension_name,
+                    "criterion_id": criterion_id,
+                    "criterion_name": criterion_name,
+                    "scoring_method": criterion.get("scoring_method", "scale_1_5"),
+                    "scoring_definitions": criterion.get("scoring_definitions", {})
+                }])
+        
+        self.logger.info(f"Created {len(criteria_groups)} criteria groups (one criterion per extractor)")
+        return criteria_groups
+    
     def _group_criteria(
         self, 
         document_size: int, 
@@ -549,7 +630,8 @@ Your analysis should be concise but informative, focusing on aspects that would 
                     "criterion_id": criterion_id,
                     "criterion_name": criterion_name,
                     "criterion_question": criterion.get("question", ""),
-                    "criterion_data": criterion
+                    "scoring_method": criterion.get("scoring_method", "scale_1_5"),
+                    "scoring_definitions": criterion.get("scoring_definitions", {})
                 })
         
         # Determine grouping strategy based on document size and complexity
@@ -599,6 +681,229 @@ Your analysis should be concise but informative, focusing on aspects that would 
             criterion_groups = consolidated_groups
         
         return criterion_groups
+    
+    def _define_output_schema(self, framework_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Define output schema based on framework structure.
+        
+        Args:
+            framework_analysis: Framework analysis results
+            
+        Returns:
+            Output schema definition
+        """
+        self.logger.info("Defining output schema based on framework structure")
+        
+        # Get framework info
+        framework_name = framework_analysis.get("framework_name", "Assessment Framework")
+        dimensions = framework_analysis.get("dimensions", [])
+        
+        # Define base schema
+        schema = {
+            "title": f"{framework_name} Assessment",
+            "type": "object",
+            "properties": {
+                "overall_assessment": {
+                    "type": "object",
+                    "properties": {
+                        "average_rating": {"type": "number"},
+                        "executive_summary": {"type": "string"},
+                        "key_strengths": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "key_improvements": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "recommendations": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        }
+                    },
+                    "required": ["average_rating", "executive_summary"]
+                },
+                "dimensions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "name": {"type": "string"},
+                            "average_rating": {"type": "number"},
+                            "summary": {"type": "string"},
+                            "criteria": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "name": {"type": "string"},
+                                        "rating": {"type": "number"},
+                                        "rationale": {"type": "string"},
+                                        "confidence": {"type": "number"},
+                                        "evidence_summary": {"type": "string"},
+                                        "evidence_count": {"type": "integer"}
+                                    },
+                                    "required": ["id", "name", "rating", "rationale"]
+                                }
+                            }
+                        },
+                        "required": ["id", "name", "criteria"]
+                    }
+                }
+            },
+            "required": ["overall_assessment", "dimensions"]
+        }
+        
+        # Define dimension-specific schemas
+        dimension_schemas = {}
+        for dimension in dimensions:
+            dimension_id = dimension.get("id", "")
+            if not dimension_id:
+                continue
+                
+            criteria_schema = {
+                "type": "object",
+                "properties": {}
+            }
+            
+            # Add each criterion to the schema
+            for criterion in dimension.get("criteria", []):
+                criterion_id = criterion.get("id", "")
+                if not criterion_id:
+                    continue
+                    
+                scoring_method = criterion.get("scoring_method", "scale_1_5")
+                
+                if scoring_method == "evidence_based":
+                    # For evidence-based criteria, store evidence items
+                    criteria_schema["properties"][criterion_id] = {
+                        "type": "object",
+                        "properties": {
+                            "rating": {"type": ["number", "null"]},
+                            "evidence": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "summary": {"type": "string"},
+                            "confidence": {"type": "number"}
+                        }
+                    }
+                else:
+                    # For numeric scale criteria
+                    criteria_schema["properties"][criterion_id] = {
+                        "type": "object",
+                        "properties": {
+                            "rating": {"type": ["number", "null"]},
+                            "rationale": {"type": "string"},
+                            "evidence_summary": {"type": "string"},
+                            "confidence": {"type": "number"}
+                        }
+                    }
+            
+            dimension_schemas[dimension_id] = criteria_schema
+        
+        # Add dimension-specific schemas
+        schema["dimension_schemas"] = dimension_schemas
+        
+        # Add evaluator output schema
+        schema["evaluator_output"] = {
+            "type": "object",
+            "properties": {
+                "dimensions": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "overall": {
+                    "type": "object",
+                    "properties": {
+                        "average_rating": {"type": "number"},
+                        "executive_summary": {"type": "string"},
+                        "key_strengths": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "key_improvements": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        }
+        
+        # Add dimension properties to evaluator schema
+        for dimension_id in dimension_schemas.keys():
+            schema["evaluator_output"]["properties"]["dimensions"]["properties"][dimension_id] = {
+                "type": "object",
+                "properties": {
+                    "criteria": {"type": "object"},
+                    "summary": {
+                        "type": "object",
+                        "properties": {
+                            "average_rating": {"type": "number"},
+                            "strengths": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "weaknesses": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "summary": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        
+        # Add reporter output schema (scorecard)
+        schema["reporter_output"] = {
+            "type": "object",
+            "properties": {
+                "scorecard": {
+                    "type": "object",
+                    "properties": {
+                        "overall_rating": {"type": "number"},
+                        "executive_summary": {"type": "string"},
+                        "key_strengths": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "key_improvements": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "dimensions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "name": {"type": "string"},
+                                    "average_rating": {"type": "number"},
+                                    "criteria": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {"type": "string"},
+                                                "name": {"type": "string"},
+                                                "rating": {"type": "number"},
+                                                "rationale": {"type": "string"},
+                                                "evidence_summary": {"type": "string"}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return schema
     
     async def _generate_parallel_strategy(
         self,
@@ -689,15 +994,19 @@ RECOMMENDED CHUNKING STRATEGY:
 Your strategy should include:
 
 1. Chunking strategy (use the recommended one unless you have a strong reason to modify it)
-2. Agent deployment plan with one extractor per criteria group and instructions for each
+2. Agent deployment plan with one extractor per criteria group and specific instructions for each
 3. Processing sequence (order of operations)
-4. Custom instructions for each agent
+4. Custom instructions for each agent based on their specific criteria
 5. Reasoning for your strategy choices
 
 Available agents:
-- Extractor: Extracts content related to framework dimensions and criteria
-- Evaluator: Evaluates criteria based on evidence
-- Reporter: Generates assessment reports
+- Extractor: Extracts content related to specific criteria (one extractor per criteria group)
+- Evaluator: Evaluates criteria based on all extracted evidence
+- Reporter: Generates structured assessment reports
+
+Each extractor should focus deeply on its assigned criteria to find ALL potential evidence.
+The evaluator should produce structured ratings by analyzing the collective evidence for each criterion.
+The reporter should format the structured evaluations into a scorecard without duplicating the evaluator's work.
 
 Please provide your strategy as a structured JSON object with the following schema:
 
@@ -941,26 +1250,35 @@ Please provide your strategy as a structured JSON object with the following sche
             
             # Create instructions
             criteria_text = "\n".join([
-                f"- {criterion['dimension_name']} / {criterion['criterion_name']}: {criterion['criterion_question']}"
+                f"- {criterion['dimension_name']} / {criterion['criterion_name']}: {criterion.get('criterion_question', '')}"
                 for criterion in group
             ])
             
-            instructions = f"""Extract evidence related to the following criteria:
+            instructions = f"""Extract ALL evidence related to the following criteria:
 
 {criteria_text}
 
 For each piece of relevant evidence, identify:
 1. Which criterion it relates to
 2. How strongly it supports or addresses the criterion
-3. The specific text from the document that provides the evidence"""
+3. The specific text from the document that provides the evidence
+
+Be thorough and extract all potential evidence, even indirect references that might be relevant.
+Consider tone, context, and implications when identifying relevant content."""
+            
+            # Create specialized name
+            agent_type = "extractor"
+            if len(group) == 1:
+                # For single criterion, add name to type
+                agent_type = f"extractor ({group[0]['criterion_name'].lower()})"
             
             # Create extractor configuration
             extractor_config = {
-                "agent_type": "extractor",
+                "agent_type": agent_type,
                 "configuration": {
                     "extraction_type": "direct",
                     "batch_size": 1,
-                    "min_confidence": 0.7,
+                    "min_confidence": 0.6,
                     "criteria_ids": criteria_ids,
                     "dimension_ids": dimension_ids
                 },
@@ -975,25 +1293,31 @@ For each piece of relevant evidence, identify:
         evaluator_config = {
             "agent_type": "evaluator",
             "configuration": {
-                "evaluation_type": "evidence-based",
+                "evaluation_type": "structured",
                 "confidence_threshold": 0.6,
-                "infer_missing": True
+                "infer_missing": True,
+                "output_format": "scorecard"
             },
-            "instructions": "Evaluate all criteria based on extracted evidence. Where evidence is strong, provide detailed rationales. Where evidence is missing or weak, indicate lower confidence.",
+            "instructions": """Evaluate each criterion based on ALL collected evidence. 
+Produce structured ratings with clear justifications. 
+Identify strengths and weaknesses for each criterion.
+Generate an overall assessment with key strengths and areas for improvement.""",
             "inputs": ["extracted_evidence_group_1", "extracted_evidence_group_2", "extracted_evidence_group_3"],
-            "outputs": ["criteria_assessments"]
+            "outputs": ["structured_assessments"]
         }
         
         # Create reporter agent
         reporter_config = {
             "agent_type": "reporter",
             "configuration": {
-                "report_type": "comprehensive",
+                "report_type": "scorecard",
                 "include_evidence": True
             },
-            "instructions": "Generate a comprehensive assessment report with evidence links and confidence ratings.",
-            "inputs": ["criteria_assessments"],
-            "outputs": ["assessment_report"]
+            "instructions": """Create a structured scorecard from the evaluations.
+Format the ratings and justifications into a clear, presentable structure.
+Do not duplicate the evaluator's analysis work.""",
+            "inputs": ["structured_assessments"],
+            "outputs": ["assessment_scorecard"]
         }
         
         # Combine agents
@@ -1010,7 +1334,7 @@ For each piece of relevant evidence, identify:
             "agents": all_agents,
             "processing_sequence": processing_sequence,
             "token_allocation": {},
-            "rationale": "Fallback strategy with parallel extraction for each criteria group, followed by evaluation and reporting."
+            "rationale": "Specialized strategy with one extractor per criterion or small group, followed by structured evaluation and reporting."
         }
         
         # Estimate token allocation

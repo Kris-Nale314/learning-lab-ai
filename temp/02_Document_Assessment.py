@@ -2,7 +2,7 @@
 Document Assessment - Framework Assessment Workbench
 
 An enhanced page that showcases parallel extractors and structured scorecard output.
-Fixed to handle None values in ratings.
+Fixed to handle None and string values in ratings.
 """
 
 import asyncio
@@ -80,7 +80,7 @@ def main():
         st.info(f"Using model: {model_info}")
     
     # Main area: Document upload and assessment
-    st.header("1. Upload Document")
+    st.header("1. Document Upload")
     
     # Document input options
     doc_tab1, doc_tab2 = st.tabs(["Upload File", "Paste Text"])
@@ -326,8 +326,12 @@ def main():
                             # Handle None rating
                             rating_display = f"{rating:.1f}" if rating is not None else "N/A"
                             confidence = criterion.get("confidence", "N/A")
-                            # Handle None confidence
-                            confidence_display = f"{confidence:.2f}" if confidence is not None else "N/A"
+                            
+                            # Handle different confidence types properly
+                            if isinstance(confidence, (int, float)):
+                                confidence_display = f"{confidence:.2f}"
+                            else:
+                                confidence_display = str(confidence)
                             
                             criteria_data.append({
                                 "Criterion": criterion_name,

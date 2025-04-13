@@ -1,101 +1,105 @@
 {
-    "id": "financial_performance_framework",
-    "name": "Financial Performance Assessment",
-    "description": "Framework for assessing key financial metrics and performance indicators in quarterly earnings calls",
-    "dimensions": [
-      {
-        "id": "financial_results",
-        "name": "Financial Results",
-        "description": "Assessment of core financial metrics and performance",
-        "criteria": [
-          {
-            "id": "revenue_performance",
-            "name": "Revenue Performance",
-            "question": "How did the company perform relative to revenue expectations?",
-            "scoring_method": "scale_1_5",
-            "scoring_definitions": {
-              "1": "Significantly below expectations (>10% miss)",
-              "5": "Significantly exceeded expectations (>10% beat)"
-            }
-          },
-          {
-            "id": "profit_margins",
-            "name": "Profit Margins",
-            "question": "How are the company's profit margins trending?",
-            "scoring_method": "scale_1_5",
-            "scoring_definitions": {
-              "1": "Significant margin deterioration",
-              "5": "Significant margin improvement"
-            }
-          },
-          {
-            "id": "cash_flow",
-            "name": "Cash Flow",
-            "question": "How strong is the company's cash flow position?",
-            "scoring_method": "scale_1_5",
-            "scoring_definitions": {
-              "1": "Poor cash flow generation, concerning trends",
-              "5": "Exceptional cash flow generation, positive trends"
-            }
+  "id": "financial_alien_framework",
+  "name": "Financial & Alien Readiness Framework",
+  "description": "A test framework to assess financial health and alien invasion preparedness",
+  "dimensions": [
+    {
+      "id": "financial_health",
+      "name": "Financial Health",
+      "description": "Assessment of overall financial health indicators",
+      "criteria": [
+        {
+          "id": "liquidity",
+          "name": "Liquidity",
+          "question": "How strong is the company's liquidity position?",
+          "scoring_method": "scale_1_5",
+          "scoring_definitions": {
+            "1": "Very poor liquidity with significant cash flow concerns",
+            "2": "Below average liquidity with some cash flow challenges",
+            "3": "Adequate liquidity to meet short-term obligations",
+            "4": "Strong liquidity position with good cash reserves",
+            "5": "Excellent liquidity with substantial cash reserves and flexible access to capital"
           }
-        ]
-      },
-      {
-        "id": "forward_guidance",
-        "name": "Forward Guidance",
-        "description": "Assessment of future projections and guidance",
-        "criteria": [
-          {
-            "id": "guidance_clarity",
-            "name": "Guidance Clarity",
-            "question": "How clear and specific is the company's forward guidance?",
-            "scoring_method": "scale_1_5",
-            "scoring_definitions": {
-              "1": "No clear guidance provided",
-              "5": "Detailed guidance with clear metrics and timeframes"
-            }
-          },
-          {
-            "id": "guidance_confidence",
-            "name": "Management Confidence",
-            "question": "How confident does management appear in their forward guidance?",
-            "scoring_method": "scale_1_5",
-            "scoring_definitions": {
-              "1": "Management shows significant uncertainty or hedging",
-              "5": "Management demonstrates strong confidence in projections"
-            }
+        },
+        {
+          "id": "solvency",
+          "name": "Solvency",
+          "question": "How solid is the company's long-term solvency position?",
+          "scoring_method": "scale_1_5",
+          "scoring_definitions": {
+            "1": "High risk of insolvency with concerning debt levels",
+            "2": "Below average solvency with elevated debt concerns",
+            "3": "Adequate solvency with manageable debt levels",
+            "4": "Strong solvency with conservative debt structure",
+            "5": "Excellent solvency with minimal debt and strong balance sheet"
           }
-        ]
-      },
-      {
-        "id": "risk_factors",
-        "name": "Risk Factors",
-        "description": "Assessment of disclosed risks and challenges",
-        "criteria": [
-          {
-            "id": "risk_disclosure",
-            "name": "Risk Disclosure",
-            "question": "How thoroughly does the company disclose potential risks?",
-            "scoring_method": "scale_1_5",
-            "scoring_definitions": {
-              "1": "Minimal or vague risk disclosure",
-              "5": "Comprehensive risk disclosure with specific scenarios"
-            }
-          },
-          {
-            "id": "risk_mitigation",
-            "name": "Risk Mitigation",
-            "question": "Has the company outlined strategies to mitigate identified risks?",
-            "scoring_method": "scale_1_5",
-            "scoring_definitions": {
-              "1": "No clear mitigation strategies discussed",
-              "5": "Detailed mitigation plans for major risk factors"
-            }
+        }
+      ]
+    },
+    {
+      "id": "strategic_initiatives",
+      "name": "Strategic Initiatives",
+      "description": "Assessment of key strategic initiatives and investments",
+      "criteria": [
+        {
+          "id": "ai_investment",
+          "name": "AI Investment",
+          "question": "How robust is the company's investment in AI technologies?",
+          "scoring_method": "scale_1_5",
+          "scoring_definitions": {
+            "1": "Minimal or no investment in AI technologies",
+            "2": "Limited investment in AI with unclear strategy",
+            "3": "Moderate investment in AI with developing strategy",
+            "4": "Significant investment in AI with clear strategy",
+            "5": "Industry-leading investment in AI with innovative applications"
           }
-        ]
-      }
-    ],
-    "scoring_methods": {
-      "scale_1_5": {"min": 1, "max": 5, "step": 1, "display": "numeric"}
+        },
+        {
+          "id": "leadership",
+          "name": "Leadership",
+          "question": "How effective is the company's leadership in executing strategy?",
+          "scoring_method": "scale_1_5",
+          "scoring_definitions": {
+            "1": "Ineffective leadership with poor strategic execution",
+            "2": "Below average leadership with inconsistent execution",
+            "3": "Competent leadership with reasonable execution",
+            "4": "Strong leadership with consistent strategic execution",
+            "5": "Exceptional leadership with outstanding strategic execution"
+          }
+        }
+      ]
+    },
+    {
+      "id": "extraordinary_risks",
+      "name": "Extraordinary Risks",
+      "description": "Assessment of preparedness for highly unusual risks",
+      "criteria": [
+        {
+          "id": "alien_invasion",
+          "name": "Alien Invasion Preparedness",
+          "question": "How prepared is the company for a potential alien invasion?",
+          "scoring_method": "scale_1_5",
+          "scoring_definitions": {
+            "1": "No alien invasion contingency plans whatsoever",
+            "2": "Minimal consideration of extraterrestrial threats",
+            "3": "Some general disaster plans that could apply to alien scenarios",
+            "4": "Specific plans addressing potential extraterrestrial contact",
+            "5": "Comprehensive alien invasion response protocols with designated bunkers and communication systems"
+          }
+        }
+      ]
+    }
+  ],
+  "scoring_methods": {
+    "scale_1_5": {
+      "min": 1,
+      "max": 5,
+      "step": 1,
+      "display": "numeric"
+    },
+    "evidence_based": {
+      "type": "evidence_collection",
+      "display": "list"
     }
   }
+}

@@ -1,8 +1,9 @@
 """
-Enhanced Evaluator Agent - Produces structured assessments from extracted evidence
+Structured Evaluator Agent - Produces structured assessments from consolidated evidence
 
-This agent analyzes consolidated evidence from multiple extractors to evaluate
-framework criteria, generating structured ratings and detailed rationales.
+This agent analyzes the comprehensive evidence packets collected and consolidated by 
+enhanced extractors to produce structured assessments with clear ratings, rationales
+and insights for each criterion.
 """
 
 import logging
@@ -15,14 +16,14 @@ from core.context import AssessmentContext
 
 class EvaluatorAgent(BaseAgent):
     """
-    Evaluates framework criteria based on consolidated evidence.
+    Evaluates criteria based on consolidated evidence packets.
     
-    The Evaluator is responsible for:
-    1. Analyzing consolidated evidence for each criterion
-    2. Generating structured ratings based on scoring methods
-    3. Providing detailed rationales for assessments
-    4. Identifying cross-criterion relationships and patterns
-    5. Producing holistic dimensional assessments
+    The Structured Evaluator is responsible for:
+    1. Analyzing consolidated evidence packets for each criterion
+    2. Generating well-justified ratings based on scoring definitions
+    3. Providing detailed rationales with strengths and weaknesses
+    4. Creating dimension-level summaries and insights
+    5. Producing a structured assessment output for the reporter
     """
     
     def __init__(
@@ -45,21 +46,26 @@ class EvaluatorAgent(BaseAgent):
         
         # Get evaluation configuration from options
         self.options = options or {}
-        self.evaluation_type = self.options.get("evaluation_type", "evidence-based")
-        self.infer_missing = self.options.get("infer_missing", False)
+        self.evaluation_type = self.options.get("evaluation_type", "structured")
+        self.infer_missing = self.options.get("infer_missing", True)
         self.confidence_threshold = self.options.get("confidence_threshold", 0.6)
         self.custom_instructions = self.options.get("instructions", "")
+        self.output_format = self.options.get("output_format", "scorecard")
+        
+        # Get schema from strategy if available
+        strategy = self.options.get("strategy", {})
+        self.output_schema = strategy.get("output_schema", {})
         
         self.logger.info(f"{name} initialized with evaluation_type={self.evaluation_type}")
         
     async def process(self) -> Dict[str, Any]:
         """
-        Evaluate framework criteria based on extracted evidence.
+        Evaluate framework criteria based on consolidated evidence packets.
         
         Returns:
-            Structured evaluation results
+            Structured evaluation results aligned with the schema
         """
-        self.logger.info("Starting criteria evaluation")
+        self.logger.info("Starting structured criteria evaluation")
         self.start_timer()
         
         try:
@@ -67,16 +73,16 @@ class EvaluatorAgent(BaseAgent):
             framework = self.context.framework
             dimensions = framework.get("dimensions", [])
             
-            # Process each dimension
-            evaluation_results = {
+            # Initialize assessment structure
+            structured_assessment = {
                 "dimensions": {},
-                "overall": {},
-                "criteria_count": 0,
-                "assessed_criteria_count": 0,
-                "missing_criteria_count": 0
+                "overall": {}
             }
             
+            # Process each dimension
             total_dimensions = len(dimensions)
+            dimension_ratings = []
+            
             for i, dimension in enumerate(dimensions):
                 dimension_id = dimension.get("id", "")
                 
@@ -89,47 +95,34 @@ class EvaluatorAgent(BaseAgent):
                 self.update_progress(progress, f"Evaluating dimension {i+1}/{total_dimensions}")
                 
                 # Evaluate dimension
-                dimension_results = await self._evaluate_dimension(dimension)
-                evaluation_results["dimensions"][dimension_id] = dimension_results
+                dimension_result = await self._evaluate_dimension(dimension)
+                structured_assessment["dimensions"][dimension_id] = dimension_result
                 
-                # Update criteria counts
-                evaluation_results["criteria_count"] += len(dimension.get("criteria", []))
-                evaluation_results["assessed_criteria_count"] += len(dimension_results["criteria"])
-            
-            # Calculate missing criteria count
-            evaluation_results["missing_criteria_count"] = (
-                evaluation_results["criteria_count"] - evaluation_results["assessed_criteria_count"]
-            )
-            
-            # Find cross-dimension patterns and relationships
-            cross_dimension_insights = await self._analyze_cross_dimension_patterns(
-                evaluation_results["dimensions"], dimensions
-            )
+                # Collect dimension rating for overall assessment
+                if dimension_result.get("summary", {}).get("average_rating") is not None:
+                    dimension_ratings.append(dimension_result["summary"]["average_rating"])
             
             # Generate overall assessment
             overall_assessment = await self._generate_overall_assessment(
-                evaluation_results["dimensions"], 
-                dimensions,
-                cross_dimension_insights
+                structured_assessment["dimensions"], 
+                dimensions
             )
-            evaluation_results["overall"] = overall_assessment
+            structured_assessment["overall"] = overall_assessment
             
             # Set overall assessment in context
             self.context.set_overall_assessment(overall_assessment)
             
             # Record processing time
             elapsed_time = self.stop_timer()
-            self.logger.info(f"Criteria evaluation completed in {elapsed_time:.2f}s")
+            self.logger.info(f"Structured evaluation completed in {elapsed_time:.2f}s")
             
             # Record observation
             self.record_observation("evaluation_completed", {
-                "dimensions_evaluated": len(evaluation_results["dimensions"]),
-                "criteria_evaluated": evaluation_results["assessed_criteria_count"],
-                "criteria_missing": evaluation_results["missing_criteria_count"],
+                "dimensions_evaluated": len(structured_assessment["dimensions"]),
                 "time_taken": elapsed_time
             })
             
-            return evaluation_results
+            return structured_assessment
             
         except Exception as e:
             self.stop_timer()
@@ -165,54 +158,37 @@ class EvaluatorAgent(BaseAgent):
             criterion_result = await self._evaluate_criterion(dimension_id, criterion)
             
             # Only include in results if we have an assessment
-            if criterion_result and criterion_result.get("rating") is not None:
+            if criterion_result:
                 criteria_results[criterion_id] = criterion_result
-                criteria_ratings.append(criterion_result.get("rating"))
-        
-        # Calculate dimension metrics
-        avg_rating = sum(criteria_ratings) / len(criteria_ratings) if criteria_ratings else None
-        rating_counts = {}
-        
-        for rating in criteria_ratings:
-            rating_counts[rating] = rating_counts.get(rating, 0) + 1
-        
-        # Generate dimension insights based on criterion assessments
-        dimension_insights = await self._generate_dimension_insights(
-            dimension, criteria_results
-        )
+                if criterion_result.get("rating") is not None:
+                    criteria_ratings.append(criterion_result.get("rating"))
         
         # Generate dimension summary
-        dimension_summary = {
-            "id": dimension_id,
-            "name": dimension_name,
-            "average_rating": avg_rating,
-            "criteria_count": len(criteria),
-            "assessed_criteria_count": len(criteria_results),
-            "rating_distribution": rating_counts,
-            "strengths": dimension_insights.get("strengths", []),
-            "weaknesses": dimension_insights.get("weaknesses", []),
-            "insights": dimension_insights.get("insights", []),
-            "summary": dimension_insights.get("summary", "")
-        }
+        dimension_summary = await self._generate_dimension_summary(
+            dimension, criteria_results
+        )
         
         # Set dimension summary in context
         self.context.set_dimension_summary(dimension_id, dimension_summary)
         
-        return {
+        # Create structured dimension result
+        dimension_result = {
             "criteria": criteria_results,
             "summary": dimension_summary
         }
+        
+        return dimension_result
     
-    async def _evaluate_criterion(self, dimension_id: str, criterion: Dict[str, Any]) -> Dict[str, Any]:
+    async def _evaluate_criterion(self, dimension_id: str, criterion: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Evaluate a criterion based on extracted evidence.
+        Evaluate a criterion based on consolidated evidence.
         
         Args:
             dimension_id: ID of the dimension
             criterion: Criterion to evaluate
             
         Returns:
-            Structured criterion evaluation
+            Structured criterion evaluation or None if no evidence and not inferring
         """
         criterion_id = criterion.get("id", "")
         criterion_name = criterion.get("name", "")
@@ -220,152 +196,90 @@ class EvaluatorAgent(BaseAgent):
         scoring_method = criterion.get("scoring_method", "scale_1_5")
         scoring_definitions = criterion.get("scoring_definitions", {})
         
-        # Get evidence for this criterion
-        evidence_list = self.get_evidence_for_criterion(dimension_id, criterion_id)
+        # Get consolidated evidence packet if available
+        consolidated_evidence = self._get_consolidated_evidence(dimension_id, criterion_id)
         
-        # If no evidence and not inferring
-        if not evidence_list and not self.infer_missing:
-            self.logger.info(f"No evidence found for {dimension_id}:{criterion_id}, skipping evaluation")
-            return None
-        
-        # Handle evidence-based criteria (just collecting evidence)
-        if scoring_method == "evidence_based":
+        # If no consolidated evidence packet, fall back to raw evidence
+        if not consolidated_evidence or consolidated_evidence.get("evidence_count", 0) == 0:
+            # Get raw evidence for this criterion
+            evidence_list = self.get_evidence_for_criterion(dimension_id, criterion_id)
+            
+            # If no evidence and not inferring
+            if not evidence_list and not self.infer_missing:
+                self.logger.info(f"No evidence found for {dimension_id}:{criterion_id}, skipping evaluation")
+                return None
+            
+            # If we have evidence but no consolidated packet, use raw evidence
             if evidence_list:
-                # Create structured assessment for evidence-based criteria
-                summary = await self._create_evidence_based_assessment(
+                # Create structured assessment from raw evidence
+                assessment = await self._create_evidence_based_assessment_from_raw(
                     dimension_id, criterion, evidence_list
                 )
-                return summary
-            elif self.infer_missing:
-                return await self._create_inferred_assessment(dimension_id, criterion)
-            else:
-                return None
                 
-        else:  # Numeric scale (scale_1_5 etc.)
-            # If we have evidence
-            if evidence_list:
-                # Evaluate the evidence to generate a rating
-                return await self._create_scored_assessment(
-                    dimension_id, criterion, evidence_list
-                )
-            # If no evidence and inferring
+                # Return the structured assessment
+                return assessment
+                
+            # If no evidence but inferring is enabled
             elif self.infer_missing:
-                return await self._create_inferred_assessment(dimension_id, criterion)
-            # Default no evidence, not inferring
-            else:
-                return None
+                # Create inferred assessment
+                assessment = await self._create_inferred_assessment(
+                    dimension_id, criterion
+                )
+                
+                # Return the inferred assessment if rating is available
+                if assessment and assessment.get("rating") is not None:
+                    return assessment
+        else:
+            # We have a consolidated evidence packet - use it for evaluation
+            assessment = await self._create_evidence_based_assessment(
+                dimension_id, criterion, consolidated_evidence
+            )
+            
+            # Return the structured assessment
+            return assessment
+                
+        # No assessment possible
+        return None
+    
+    def _get_consolidated_evidence(self, dimension_id: str, criterion_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get consolidated evidence packet from extractor observations.
+        
+        Args:
+            dimension_id: ID of the dimension
+            criterion_id: ID of the criterion
+            
+        Returns:
+            Consolidated evidence packet or None if not found
+        """
+        # Look for extraction_completed observations from extractors
+        for observation in self.context.get_agent_observations(observation_type="extraction_completed"):
+            content = observation.get("content", {})
+            if "consolidated_evidence" in content:
+                # Check if this packet contains our criterion
+                key = f"{dimension_id}:{criterion_id}"
+                if key in content["consolidated_evidence"]:
+                    return content["consolidated_evidence"][key]
+        
+        # No consolidated evidence found
+        return None
     
     async def _create_evidence_based_assessment(
         self, 
         dimension_id: str, 
         criterion: Dict[str, Any],
-        evidence_list: List[Dict[str, Any]]
+        consolidated_evidence: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Create assessment for evidence-based criteria.
+        Create a structured assessment based on consolidated evidence.
         
         Args:
             dimension_id: ID of the dimension
             criterion: Criterion to evaluate
-            evidence_list: List of evidence items
+            consolidated_evidence: Consolidated evidence packet
             
         Returns:
-            Evidence-based assessment
-        """
-        criterion_id = criterion.get("id", "")
-        criterion_name = criterion.get("name", "")
-        criterion_question = criterion.get("question", "")
-        
-        # Format evidence for analysis
-        evidence_text = self._format_evidence_text(evidence_list)
-        
-        # Prompt for evidence analysis
-        system_prompt = """You are an expert evaluator analyzing evidence. Provide a structured assessment of the evidence related to a specific criterion."""
-        
-        human_prompt = f"""Analyze the following evidence related to this criterion:
-
-CRITERION: {criterion_name}
-QUESTION: {criterion_question}
-
-EVIDENCE:
-{evidence_text}
-
-Please provide a structured assessment with:
-1. A concise summary of the key findings from the evidence
-2. The strengths identified (key positive aspects)
-3. The weaknesses or gaps identified (areas lacking evidence or needing improvement)
-4. Your confidence level in this assessment (0.0-1.0)
-
-Your assessment should be focused and directly address the criterion question."""
-
-        # Define schema for structured output
-        assessment_schema = {
-            "type": "object",
-            "properties": {
-                "summary": {"type": "string"},
-                "strengths": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
-                "weaknesses": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
-                "confidence": {"type": "number"}
-            },
-            "required": ["summary", "strengths", "weaknesses", "confidence"]
-        }
-
-        # Call LLM for structured assessment
-        assessment, _ = await self._safe_llm_call(
-            "generate_structured_output",
-            prompt=human_prompt,
-            output_schema=assessment_schema,
-            system_prompt=system_prompt,
-            temperature=0.3,
-            max_tokens=1000
-        )
-        
-        # Create structured result
-        result = {
-            "criterion_id": criterion_id,
-            "rating": len(evidence_list),  # Use evidence count as rating for evidence-based criteria
-            "evidence_count": len(evidence_list),
-            "evidence_ids": [ev.get("id") for ev in evidence_list if "id" in ev],
-            "summary": assessment.get("summary", ""),
-            "strengths": assessment.get("strengths", []),
-            "weaknesses": assessment.get("weaknesses", []),
-            "confidence": assessment.get("confidence", 0.8),
-            "assessment_type": "evidence-based"
-        }
-        
-        # Set assessment in context
-        self.set_criterion_assessment(
-            dimension_id=dimension_id,
-            criterion_id=criterion_id,
-            rating=result["rating"],
-            rationale=result["summary"],
-            confidence=result["confidence"]
-        )
-        
-        return result
-    
-    async def _create_scored_assessment(
-        self, 
-        dimension_id: str, 
-        criterion: Dict[str, Any],
-        evidence_list: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Create scored assessment for criteria with rating scales.
-        
-        Args:
-            dimension_id: ID of the dimension
-            criterion: Criterion to evaluate
-            evidence_list: List of evidence items
-            
-        Returns:
-            Scored assessment
+            Structured criterion assessment
         """
         criterion_id = criterion.get("id", "")
         criterion_name = criterion.get("name", "")
@@ -373,36 +287,46 @@ Your assessment should be focused and directly address the criterion question.""
         scoring_method = criterion.get("scoring_method", "scale_1_5")
         scoring_definitions = criterion.get("scoring_definitions", {})
         
-        # Format evidence text
-        evidence_text = self._format_evidence_text(evidence_list)
+        # Get the comprehensive evidence summary
+        comprehensive_summary = consolidated_evidence.get("comprehensive_summary", "")
+        evidence_count = consolidated_evidence.get("evidence_count", 0)
         
-        # Format scoring scale
+        # Format scoring definitions
         scoring_text = ""
         for score, definition in scoring_definitions.items():
             scoring_text += f"- Score {score}: {definition}\n"
         
-        # Prompt for scored assessment
-        system_prompt = """You are an expert evaluator providing structured ratings. Analyze the evidence and provide a detailed assessment with clear justification for your rating."""
+        # Prepare prompt for structured evaluation
+        system_prompt = """You are an expert evaluator generating structured assessments with clear ratings and rationales.
+Analyze the consolidated evidence to make a fair, well-justified evaluation based on scoring definitions.
+Focus on creating a structured output that clearly explains the rating and highlights key strengths and weaknesses."""
         
-        human_prompt = f"""Evaluate the following criterion based on the provided evidence.
+        # Add custom instructions if provided
+        if self.custom_instructions:
+            system_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{self.custom_instructions}"
+        
+        # Create human prompt
+        human_prompt = f"""Evaluate the following criterion based on the consolidated evidence.
 
 CRITERION: {criterion_name}
 QUESTION: {criterion_question}
+DIMENSION: {dimension_id}
 
-SCORING SCALE:
+SCORING DEFINITIONS:
 {scoring_text}
 
-EVIDENCE:
-{evidence_text}
+CONSOLIDATED EVIDENCE SUMMARY:
+{comprehensive_summary}
 
-Based on this evidence, provide a structured assessment with:
-1. A numeric rating from the scoring scale
-2. A detailed rationale explaining your rating
-3. Key strengths identified in the evidence
-4. Key weaknesses or gaps identified
+Based on this consolidated evidence, provide a structured assessment with:
+1. A numeric rating that best matches the scoring definitions
+2. A clear rationale explaining why this rating is appropriate
+3. Key strengths identified from the evidence (2-4 points)
+4. Key weaknesses or gaps identified (2-4 points)
 5. Your confidence level in this assessment (0.0-1.0)
 
-Your assessment should directly address the criterion question and clearly justify the rating."""
+Align your rating precisely with the scoring definitions.
+This criterion has {evidence_count} pieces of evidence that have been consolidated into the summary above."""
 
         # Define schema for structured output
         assessment_schema = {
@@ -418,7 +342,8 @@ Your assessment should directly address the criterion question and clearly justi
                     "type": "array",
                     "items": {"type": "string"}
                 },
-                "confidence": {"type": "number"}
+                "confidence": {"type": "number"},
+                "evidence_summary": {"type": "string"}
             },
             "required": ["rating", "rationale", "strengths", "weaknesses", "confidence"]
         }
@@ -430,20 +355,21 @@ Your assessment should directly address the criterion question and clearly justi
             output_schema=assessment_schema,
             system_prompt=system_prompt,
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1500
         )
         
         # Create structured result
         result = {
-            "criterion_id": criterion_id,
+            "id": criterion_id,
+            "name": criterion_name,
             "rating": assessment.get("rating"),
-            "evidence_count": len(evidence_list),
-            "evidence_ids": [ev.get("id") for ev in evidence_list if "id" in ev],
             "rationale": assessment.get("rationale", ""),
             "strengths": assessment.get("strengths", []),
             "weaknesses": assessment.get("weaknesses", []),
             "confidence": assessment.get("confidence", 0.8),
-            "assessment_type": "scored"
+            "evidence_count": evidence_count,
+            "evidence_summary": assessment.get("evidence_summary", "") or comprehensive_summary,
+            "assessment_type": "evidence-based"
         }
         
         # Set assessment in context
@@ -457,7 +383,180 @@ Your assessment should directly address the criterion question and clearly justi
         
         return result
     
-    async def _create_inferred_assessment(self, dimension_id: str, criterion: Dict[str, Any]) -> Dict[str, Any]:
+    async def _create_evidence_based_assessment_from_raw(
+        self, 
+        dimension_id: str, 
+        criterion: Dict[str, Any],
+        evidence_list: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Create a structured assessment based on raw evidence (fallback method).
+        
+        Args:
+            dimension_id: ID of the dimension
+            criterion: Criterion to evaluate
+            evidence_list: List of evidence items
+            
+        Returns:
+            Structured criterion assessment
+        """
+        criterion_id = criterion.get("id", "")
+        criterion_name = criterion.get("name", "")
+        criterion_question = criterion.get("question", "")
+        scoring_method = criterion.get("scoring_method", "scale_1_5")
+        scoring_definitions = criterion.get("scoring_definitions", {})
+        
+        # Format evidence for analysis
+        evidence_text = self._format_evidence_for_evaluation(evidence_list)
+        
+        # Format scoring definitions
+        scoring_text = ""
+        for score, definition in scoring_definitions.items():
+            scoring_text += f"- Score {score}: {definition}\n"
+        
+        # Prepare prompt for structured evaluation
+        system_prompt = """You are an expert evaluator generating structured assessments with clear ratings and rationales.
+Analyze all evidence collectively to make a fair, well-justified evaluation based on scoring definitions.
+Focus on creating a structured output that clearly explains the rating and highlights key strengths and weaknesses."""
+        
+        # Add custom instructions if provided
+        if self.custom_instructions:
+            system_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{self.custom_instructions}"
+        
+        # Create human prompt
+        human_prompt = f"""Evaluate the following criterion based on ALL collected evidence.
+
+CRITERION: {criterion_name}
+QUESTION: {criterion_question}
+DIMENSION: {dimension_id}
+
+SCORING DEFINITIONS:
+{scoring_text}
+
+EVIDENCE:
+{evidence_text}
+
+Based on this evidence, provide a structured assessment with:
+1. A numeric rating that best matches the scoring definitions
+2. A clear rationale explaining why this rating is appropriate
+3. Key strengths identified from the evidence (2-4 points)
+4. Key weaknesses or gaps identified (2-4 points)
+5. Your confidence level in this assessment (0.0-1.0)
+
+Consider all evidence collectively, weighing direct evidence more heavily than indirect.
+Align your rating precisely with the scoring definitions."""
+
+        # Define schema for structured output
+        assessment_schema = {
+            "type": "object",
+            "properties": {
+                "rating": {"type": "number"},
+                "rationale": {"type": "string"},
+                "strengths": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "weaknesses": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "confidence": {"type": "number"},
+                "evidence_summary": {"type": "string"}
+            },
+            "required": ["rating", "rationale", "strengths", "weaknesses", "confidence"]
+        }
+
+        # Call LLM for structured assessment
+        assessment, _ = await self._safe_llm_call(
+            "generate_structured_output",
+            prompt=human_prompt,
+            output_schema=assessment_schema,
+            system_prompt=system_prompt,
+            temperature=0.3,
+            max_tokens=1500
+        )
+        
+        # Create structured result
+        result = {
+            "id": criterion_id,
+            "name": criterion_name,
+            "rating": assessment.get("rating"),
+            "rationale": assessment.get("rationale", ""),
+            "strengths": assessment.get("strengths", []),
+            "weaknesses": assessment.get("weaknesses", []),
+            "confidence": assessment.get("confidence", 0.8),
+            "evidence_count": len(evidence_list),
+            "evidence_summary": assessment.get("evidence_summary", ""),
+            "assessment_type": "evidence-based"
+        }
+        
+        # Set assessment in context
+        self.set_criterion_assessment(
+            dimension_id=dimension_id,
+            criterion_id=criterion_id,
+            rating=result["rating"],
+            rationale=result["rationale"],
+            confidence=result["confidence"]
+        )
+        
+        return result
+    
+    def _format_evidence_for_evaluation(self, evidence_list: List[Dict[str, Any]]) -> str:
+        """
+        Format evidence collection for evaluation.
+        
+        Args:
+            evidence_list: List of evidence items
+            
+        Returns:
+            Formatted evidence text
+        """
+        if not evidence_list:
+            return "No evidence found."
+            
+        # Group evidence by relevance level
+        evidence_by_level = {
+            "Direct": [],
+            "Indirect": [],
+            "Contextual": [],
+            "Implied": []
+        }
+        
+        for evidence in evidence_list:
+            # Get evidence text and metadata
+            text = evidence.get("text", "")
+            metadata = evidence.get("metadata", {})
+            relevance_level = metadata.get("relevance_level", "Direct")
+            
+            # Default to Direct if not specified
+            if not relevance_level or relevance_level not in evidence_by_level:
+                relevance_level = "Direct"
+            
+            # Add to appropriate group
+            evidence_by_level[relevance_level].append({
+                "text": text,
+                "relevance": metadata.get("relevance_explanation", ""),
+                "confidence": metadata.get("confidence", 0.8)
+            })
+        
+        # Format evidence by relevance level
+        evidence_text = ""
+        
+        for level, items in evidence_by_level.items():
+            if not items:
+                continue
+                
+            evidence_text += f"\n== {level} Evidence ==\n\n"
+            
+            for i, evidence in enumerate(items):
+                evidence_text += f"Evidence {i+1}:\n"
+                evidence_text += f"Text: {evidence['text']}\n"
+                evidence_text += f"Relevance: {evidence['relevance']}\n"
+                evidence_text += f"Confidence: {evidence['confidence']}\n\n"
+        
+        return evidence_text
+    
+    async def _create_inferred_assessment(self, dimension_id: str, criterion: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Create an inferred assessment when no direct evidence is available.
         
@@ -466,7 +565,7 @@ Your assessment should directly address the criterion question and clearly justi
             criterion: Criterion to evaluate
             
         Returns:
-            Inferred assessment
+            Inferred assessment or None if inference not possible
         """
         criterion_id = criterion.get("id", "")
         criterion_name = criterion.get("name", "")
@@ -474,59 +573,59 @@ Your assessment should directly address the criterion question and clearly justi
         scoring_method = criterion.get("scoring_method", "scale_1_5")
         scoring_definitions = criterion.get("scoring_definitions", {})
         
-        # Get dimension info
+        # Format scoring definitions
+        scoring_text = ""
+        for score, definition in scoring_definitions.items():
+            scoring_text += f"- Score {score}: {definition}\n"
+        
+        # Get dimension info for context
         dimension_name = "Unknown Dimension"
         for dimension in self.context.framework.get("dimensions", []):
             if dimension.get("id") == dimension_id:
                 dimension_name = dimension.get("name", dimension_name)
                 break
         
-        # Format scoring scale
-        scoring_text = ""
-        for score, definition in scoring_definitions.items():
-            scoring_text += f"- Score {score}: {definition}\n"
+        # Get framework info for context
+        framework_name = self.context.framework.get("name", "Assessment Framework")
         
-        # Prompt for inferred assessment
-        system_prompt = """You are an expert evaluator making inferences when direct evidence is lacking. Provide a structured assessment based on general knowledge and context, clearly marking it as inferred."""
+        # Prepare prompt for inference
+        system_prompt = """You are an expert evaluator making inferences when direct evidence is lacking. 
+Be cautious and conservative with inferences, and clearly indicate the level of uncertainty.
+Only infer a rating if there is a reasonable basis for doing so."""
         
-        human_prompt = f"""Infer an assessment for the following criterion that lacks direct evidence.
+        human_prompt = f"""Determine if an assessment can be inferred for the following criterion that lacks direct evidence.
 
+FRAMEWORK: {framework_name}
 CRITERION: {criterion_name}
 QUESTION: {criterion_question}
 DIMENSION: {dimension_name}
-SCORING METHOD: {scoring_method}
 
-SCORING SCALE:
+SCORING DEFINITIONS:
 {scoring_text}
 
-Based on general knowledge and the context of this evaluation, provide a structured assessment with:
-1. Whether an inference is possible
-2. If possible, a numeric rating from the scoring scale
-3. A detailed rationale explaining your inferred rating
-4. Potential strengths (inferred)
-5. Potential weaknesses (inferred)
-6. Your confidence level in this inference (0.0-1.0)
+This criterion has no direct evidence in the document. Based on general context and knowledge:
 
-Clearly mark this as an inference and explain your reasoning process."""
+1. Determine if it's appropriate to infer a rating (consider if silence on this topic is meaningful)
+2. If appropriate, provide an inferred rating that best matches the scoring definitions
+3. Explain clearly why you've made this inference and the level of confidence
+4. Note key assumptions made in this inference
 
-        # Define schema for structured output
+Be conservative - only infer a rating when reasonable to do so."""
+
+        # Define schema for inference
         inference_schema = {
             "type": "object",
             "properties": {
                 "inference_possible": {"type": "boolean"},
                 "rating": {"type": ["number", "null"]},
                 "rationale": {"type": "string"},
-                "inferred_strengths": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
-                "inferred_weaknesses": {
+                "assumptions": {
                     "type": "array",
                     "items": {"type": "string"}
                 },
                 "confidence": {"type": "number"}
             },
-            "required": ["inference_possible", "rationale", "inferred_strengths", "inferred_weaknesses", "confidence"]
+            "required": ["inference_possible", "rationale", "confidence"]
         }
 
         # Call LLM for inference
@@ -539,23 +638,24 @@ Clearly mark this as an inference and explain your reasoning process."""
             max_tokens=1000
         )
         
-        # Process inference results
+        # Check if inference is possible
         inference_possible = inference.get("inference_possible", False)
         rating = inference.get("rating")
-        rationale = inference.get("rationale", "")
         confidence = inference.get("confidence", 0.0)
         
-        # Create structured result
+        # Only proceed if inference is possible and confidence is above threshold
         if inference_possible and rating is not None and confidence >= self.confidence_threshold:
+            # Create structured result
             result = {
-                "criterion_id": criterion_id,
+                "id": criterion_id,
+                "name": criterion_name,
                 "rating": rating,
-                "evidence_count": 0,
-                "evidence_ids": [],
-                "rationale": f"[INFERRED] {rationale}",
-                "strengths": inference.get("inferred_strengths", []),
-                "weaknesses": inference.get("inferred_weaknesses", []),
+                "rationale": f"[INFERRED] {inference.get('rationale', '')}",
+                "strengths": [],
+                "weaknesses": [],
+                "assumptions": inference.get("assumptions", []),
                 "confidence": confidence,
+                "evidence_count": 0,
                 "assessment_type": "inferred",
                 "inferred": True
             }
@@ -570,54 +670,45 @@ Clearly mark this as an inference and explain your reasoning process."""
             )
             
             return result
-        else:
-            # Not confident enough for inference
-            return None
+        
+        # Inference not possible with sufficient confidence
+        return None
     
-    def _format_evidence_text(self, evidence_list: List[Dict[str, Any]]) -> str:
-        """Format evidence list into text for prompts."""
-        if not evidence_list:
-            return "No evidence found."
-            
-        evidence_text = ""
-        for i, evidence in enumerate(evidence_list):
-            evidence_text += f"Evidence {i+1}:\n"
-            evidence_text += f"{evidence.get('text', '')}\n"
-            
-            # Add confidence if available
-            confidence = evidence.get("confidence", None)
-            if confidence is not None:
-                evidence_text += f"Confidence: {confidence}\n"
-                
-            # Add relevance if available
-            relevance = evidence.get("relevance", None)
-            if relevance:
-                evidence_text += f"Relevance: {relevance}\n"
-                
-            evidence_text += "\n"
-            
-        return evidence_text
-    
-    async def _generate_dimension_insights(
-        self,
+    async def _generate_dimension_summary(
+        self, 
         dimension: Dict[str, Any],
         criteria_results: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Generate insights for a dimension based on criterion assessments.
+        Generate a structured summary for a dimension.
         
         Args:
             dimension: Framework dimension
-            criteria_results: Results for criteria in the dimension
+            criteria_results: Results for criteria in this dimension
             
         Returns:
-            Dimension insights
+            Structured dimension summary
         """
         dimension_id = dimension.get("id", "")
         dimension_name = dimension.get("name", "")
         
-        # Collect criteria information for prompt
+        # No criteria results
+        if not criteria_results:
+            return {
+                "id": dimension_id,
+                "name": dimension_name,
+                "average_rating": None,
+                "criteria_assessed": 0,
+                "criteria_total": len(dimension.get("criteria", [])),
+                "strengths": [],
+                "weaknesses": [],
+                "summary": "No criteria assessed for this dimension."
+            }
+        
+        # Collect criteria information
         criteria_info = []
+        ratings = []
+        
         for criterion_id, result in criteria_results.items():
             # Find criterion name
             criterion_name = criterion_id
@@ -626,49 +717,45 @@ Clearly mark this as an inference and explain your reasoning process."""
                     criterion_name = c.get("name", criterion_id)
                     break
             
-            # Format criterion result
-            criterion_info = {
-                "name": criterion_name,
-                "rating": result.get("rating"),
-                "rationale": result.get("rationale", ""),
-                "strengths": result.get("strengths", []),
-                "weaknesses": result.get("weaknesses", []),
-                "confidence": result.get("confidence", 0.0),
-                "evidence_count": result.get("evidence_count", 0)
-            }
-            
-            criteria_info.append(criterion_info)
+            # Add to list if rating is available
+            if result.get("rating") is not None:
+                ratings.append(result["rating"])
+                
+                criteria_info.append({
+                    "id": criterion_id,
+                    "name": criterion_name,
+                    "rating": result["rating"],
+                    "rationale": result.get("rationale", ""),
+                    "strengths": result.get("strengths", []),
+                    "weaknesses": result.get("weaknesses", [])
+                })
         
-        # If no criteria assessed, return empty insights
-        if not criteria_info:
-            return {
-                "strengths": [],
-                "weaknesses": [],
-                "insights": [],
-                "summary": ""
-            }
+        # Calculate average rating
+        average_rating = sum(ratings) / len(ratings) if ratings else None
         
         # Format criteria info for prompt
         criteria_text = json.dumps(criteria_info, indent=2)
         
-        # Prompt for dimension insights
-        system_prompt = """You are an expert analyst providing insights across multiple assessments. Identify patterns, strengths, weaknesses, and generate a holistic summary."""
+        # Create prompt for dimension summary
+        system_prompt = """You are an expert evaluator creating dimension summaries.
+Synthesize the results of multiple criteria into a cohesive dimension assessment.
+Identify key patterns, strengths, and weaknesses across the criteria."""
         
-        human_prompt = f"""Analyze the following assessments for the dimension: {dimension_name}
+        human_prompt = f"""Generate a summary for dimension: {dimension_name}
 
 CRITERIA ASSESSMENTS:
 {criteria_text}
 
-Based on these assessments, provide:
-1. Key strengths across the criteria (3-5 points)
-2. Key weaknesses or gaps across the criteria (3-5 points)
-3. Cross-cutting insights that emerge from analyzing all criteria together (2-3 insights)
-4. A concise summary of the dimension as a whole
+Based on these criteria assessments, provide:
+1. 3-5 key strengths across the criteria in this dimension
+2. 3-5 key weaknesses or areas for improvement
+3. A concise summary of the dimension's overall assessment
 
-Focus on patterns and relationships between different criteria within this dimension."""
+Focus on identifying patterns and themes that emerge across multiple criteria.
+Be specific and substantive in your observations."""
 
-        # Define schema for structured output
-        insights_schema = {
+        # Define schema for summary
+        summary_schema = {
             "type": "object",
             "properties": {
                 "strengths": {
@@ -679,41 +766,49 @@ Focus on patterns and relationships between different criteria within this dimen
                     "type": "array",
                     "items": {"type": "string"}
                 },
-                "insights": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
                 "summary": {"type": "string"}
             },
-            "required": ["strengths", "weaknesses", "insights", "summary"]
+            "required": ["strengths", "weaknesses", "summary"]
         }
 
-        # Call LLM for insights
-        insights, _ = await self._safe_llm_call(
+        # Call LLM for dimension summary
+        summary_result, _ = await self._safe_llm_call(
             "generate_structured_output",
             prompt=human_prompt,
-            output_schema=insights_schema,
+            output_schema=summary_schema,
             system_prompt=system_prompt,
             temperature=0.3,
             max_tokens=1000
         )
         
-        return insights
+        # Create dimension summary
+        dimension_summary = {
+            "id": dimension_id,
+            "name": dimension_name,
+            "average_rating": average_rating,
+            "criteria_assessed": len(ratings),
+            "criteria_total": len(dimension.get("criteria", [])),
+            "strengths": summary_result.get("strengths", []),
+            "weaknesses": summary_result.get("weaknesses", []),
+            "summary": summary_result.get("summary", "")
+        }
+        
+        return dimension_summary
     
-    async def _analyze_cross_dimension_patterns(
-        self,
+    async def _generate_overall_assessment(
+        self, 
         dimension_results: Dict[str, Dict[str, Any]],
         dimensions: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Analyze patterns and relationships across dimensions.
+        Generate an overall assessment based on all dimension evaluations.
         
         Args:
             dimension_results: Results for all dimensions
             dimensions: Framework dimensions
             
         Returns:
-            Cross-dimension insights
+            Structured overall assessment
         """
         # Create dimension name lookup
         dimension_names = {}
@@ -722,179 +817,67 @@ Focus on patterns and relationships between different criteria within this dimen
             if dimension_id:
                 dimension_names[dimension_id] = dimension.get("name", dimension_id)
         
-        # Collect dimension information for prompt
-        dimensions_info = []
-        for dimension_id, result in dimension_results.items():
-            dimension_name = dimension_names.get(dimension_id, dimension_id)
-            summary = result.get("summary", {})
-            
-            # Format dimension info
-            dimension_info = {
-                "name": dimension_name,
-                "average_rating": summary.get("average_rating"),
-                "strengths": summary.get("strengths", []),
-                "weaknesses": summary.get("weaknesses", []),
-                "insights": summary.get("insights", []),
-                "summary": summary.get("summary", "")
-            }
-            
-            dimensions_info.append(dimension_info)
-        
-        # If less than 2 dimensions assessed, skip cross-dimension analysis
-        if len(dimensions_info) < 2:
-            return {
-                "relationships": [],
-                "patterns": [],
-                "insights": []
-            }
-        
-        # Format dimensions info for prompt
-        dimensions_text = json.dumps(dimensions_info, indent=2)
-        
-        # Prompt for cross-dimension analysis
-        system_prompt = """You are an expert analyst identifying relationships and patterns across different dimensions. Focus on connections, interdependencies, and emergent patterns."""
-        
-        human_prompt = f"""Analyze the relationships between the following dimensions:
-
-DIMENSION SUMMARIES:
-{dimensions_text}
-
-Based on these dimension summaries, provide:
-1. Key relationships between dimensions (how do they influence each other?)
-2. Cross-cutting patterns that emerge across multiple dimensions
-3. Holistic insights that can only be seen when analyzing all dimensions together
-
-Focus on identifying connections and interdependencies that wouldn't be visible when looking at dimensions in isolation."""
-
-        # Define schema for structured output
-        cross_schema = {
-            "type": "object",
-            "properties": {
-                "relationships": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
-                "patterns": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
-                "insights": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                }
-            },
-            "required": ["relationships", "patterns", "insights"]
-        }
-
-        # Call LLM for cross-dimension analysis
-        cross_analysis, _ = await self._safe_llm_call(
-            "generate_structured_output",
-            prompt=human_prompt,
-            output_schema=cross_schema,
-            system_prompt=system_prompt,
-            temperature=0.3,
-            max_tokens=1000
-        )
-        
-        return cross_analysis
-    
-    async def _generate_overall_assessment(
-        self, 
-        dimension_results: Dict[str, Dict[str, Any]], 
-        dimensions: List[Dict[str, Any]],
-        cross_dimension_insights: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Generate overall assessment for the framework.
-        
-        Args:
-            dimension_results: Results for all dimensions
-            dimensions: Framework dimensions
-            cross_dimension_insights: Insights from cross-dimension analysis
-            
-        Returns:
-            Overall assessment
-        """
-        # Create dimension name lookup
-        dimension_names = {}
-        for dimension in dimensions:
-            dimension_id = dimension.get("id", "")
-            if dimension_id:
-                dimension_names[dimension_id] = dimension.get("name", dimension_id)
-        
-        # Collect dimension metrics for summary
-        dimension_metrics = []
+        # Collect dimension information
+        dimension_info = []
+        dimension_ratings = []
         total_criteria_assessed = 0
         total_criteria = 0
-        dimension_ratings = []
         
-        for dimension_id, result in dimension_results.items():
+        for dimension_id, results in dimension_results.items():
             dimension_name = dimension_names.get(dimension_id, dimension_id)
-            summary = result.get("summary", {})
-            criteria_results = result.get("criteria", {})
+            summary = results.get("summary", {})
+            average_rating = summary.get("average_rating")
             
-            # Calculate metrics
-            avg_rating = summary.get("average_rating")
-            criteria_assessed = len(criteria_results)
-            criteria_total = 0
-            
-            # Count total criteria in dimension
-            for dim in dimensions:
-                if dim.get("id") == dimension_id:
-                    criteria_total = len(dim.get("criteria", []))
-                    break
-            
-            # Add to totals
+            # Count assessed criteria
+            criteria_assessed = summary.get("criteria_assessed", 0)
+            criteria_total = summary.get("criteria_total", 0)
             total_criteria_assessed += criteria_assessed
             total_criteria += criteria_total
             
-            if avg_rating is not None:
-                dimension_ratings.append(avg_rating)
-            
-            # Format dimension metrics
-            dimension_metric = {
+            # Add to dimension ratings if available
+            if average_rating is not None:
+                dimension_ratings.append(average_rating)
+                
+            # Add to dimension info
+            dimension_info.append({
+                "id": dimension_id,
                 "name": dimension_name,
-                "average_rating": avg_rating,
-                "criteria_assessed": criteria_assessed,
-                "criteria_total": criteria_total,
-                "coverage": criteria_assessed / max(1, criteria_total),
-                "strengths_count": len(summary.get("strengths", [])),
-                "weaknesses_count": len(summary.get("weaknesses", []))
-            }
-            
-            dimension_metrics.append(dimension_metric)
+                "average_rating": average_rating,
+                "strengths": summary.get("strengths", []),
+                "weaknesses": summary.get("weaknesses", []),
+                "summary": summary.get("summary", "")
+            })
         
-        # Calculate overall metrics
-        overall_avg_rating = sum(dimension_ratings) / len(dimension_ratings) if dimension_ratings else None
+        # Calculate overall rating
+        overall_rating = sum(dimension_ratings) / len(dimension_ratings) if dimension_ratings else None
         criteria_coverage = total_criteria_assessed / max(1, total_criteria)
         
-        # Format cross-dimension insights for prompt
-        cross_insights_text = json.dumps(cross_dimension_insights, indent=2)
+        # Get framework name
+        framework_name = self.context.framework.get("name", "Assessment Framework")
         
-        # Format dimension metrics for prompt
-        dimension_metrics_text = json.dumps(dimension_metrics, indent=2)
+        # Format dimension info for prompt
+        dimensions_text = json.dumps(dimension_info, indent=2)
         
-        # Prompt for overall assessment
-        system_prompt = """You are an expert evaluator creating a comprehensive assessment. Synthesize information across multiple dimensions to provide a structured overall assessment with clear ratings, insights, and recommendations."""
+        # Create prompt for overall assessment
+        system_prompt = """You are an expert evaluator creating comprehensive assessment summaries.
+Synthesize results across multiple dimensions into a cohesive overall assessment with clear recommendations.
+Identify key patterns and insights that emerge when viewing the assessment holistically."""
         
-        human_prompt = f"""Generate a comprehensive overall assessment based on the following information:
+        human_prompt = f"""Generate an overall assessment for: {framework_name}
 
-DIMENSION METRICS:
-{dimension_metrics_text}
+DIMENSION ASSESSMENTS:
+{dimensions_text}
 
-CROSS-DIMENSION INSIGHTS:
-{cross_insights_text}
+Based on these dimension assessments, provide:
+1. An executive summary of the overall assessment (3-4 paragraphs)
+2. 3-5 key strengths across all dimensions
+3. 3-5 key areas for improvement across all dimensions
+4. 3-5 specific recommendations based on the assessment
 
-Based on this information, provide a structured overall assessment with:
-1. An executive summary of the overall assessment
-2. Key strengths identified across all dimensions (3-5)
-3. Key areas for improvement across all dimensions (3-5)
-4. Strategic recommendations based on the assessment (3-5)
-5. Critical success factors for improvement
+Focus on delivering a balanced, insightful assessment that captures the most important findings.
+Be specific and actionable in your recommendations."""
 
-Your assessment should be holistic, focusing on the relationships between dimensions and the overall picture that emerges."""
-
-        # Define schema for structured output
+        # Define schema for overall assessment
         assessment_schema = {
             "type": "object",
             "properties": {
@@ -910,40 +893,33 @@ Your assessment should be holistic, focusing on the relationships between dimens
                 "recommendations": {
                     "type": "array",
                     "items": {"type": "string"}
-                },
-                "critical_success_factors": {
-                    "type": "array",
-                    "items": {"type": "string"}
                 }
             },
-            "required": ["executive_summary", "key_strengths", "key_improvements", "recommendations", "critical_success_factors"]
+            "required": ["executive_summary", "key_strengths", "key_improvements", "recommendations"]
         }
 
         # Call LLM for overall assessment
-        assessment, _ = await self._safe_llm_call(
+        assessment_result, _ = await self._safe_llm_call(
             "generate_structured_output",
             prompt=human_prompt,
             output_schema=assessment_schema,
             system_prompt=system_prompt,
             temperature=0.3,
-            max_tokens=1200
+            max_tokens=1500
         )
         
-        # Create structured overall assessment
+        # Create overall assessment
         overall_assessment = {
-            "average_rating": overall_avg_rating,
+            "average_rating": overall_rating,
             "criteria_assessed": total_criteria_assessed,
             "criteria_total": total_criteria,
             "criteria_coverage": criteria_coverage,
-            "dimension_count": len(dimension_metrics),
-            "timestamp": self.context.start_time.isoformat(),
-            "executive_summary": assessment.get("executive_summary", ""),
-            "key_strengths": assessment.get("key_strengths", []),
-            "key_improvements": assessment.get("key_improvements", []),
-            "recommendations": assessment.get("recommendations", []),
-            "critical_success_factors": assessment.get("critical_success_factors", []),
-            "cross_dimension_relationships": cross_dimension_insights.get("relationships", []),
-            "cross_dimension_patterns": cross_dimension_insights.get("patterns", [])
+            "dimension_count": len(dimension_info),
+            "executive_summary": assessment_result.get("executive_summary", ""),
+            "key_strengths": assessment_result.get("key_strengths", []),
+            "key_improvements": assessment_result.get("key_improvements", []),
+            "recommendations": assessment_result.get("recommendations", []),
+            "timestamp": self.context.start_time.isoformat()
         }
         
         return overall_assessment
