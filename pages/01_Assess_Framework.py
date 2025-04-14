@@ -1,8 +1,8 @@
 """
-01_Assess_Framework - Main assessment page for Framework Assessment Workbench
+01_Assess_Framework - Enhanced assessment page for Framework Assessment Workbench
 
 This is the primary page for assessing documents against frameworks using
-the enhanced multi-agent architecture with improved UI integration.
+the enhanced multi-agent architecture and professional UI components.
 """
 
 import os
@@ -13,6 +13,7 @@ import streamlit as st
 import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+import pandas as pd
 
 # Ensure core modules are in path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,8 +30,16 @@ from utils import ui_styles
 from utils import ui_progress
 from utils import ui_results
 
-# Initialize UI
-ui_components.initialize_ui()
+# Configure the page
+st.set_page_config(
+    page_title="Framework Assessment",
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Apply custom styles
+ui_styles.apply_styles()
 
 async def run_assessment(document, framework, options):
     """
@@ -60,9 +69,10 @@ async def run_assessment(document, framework, options):
         )
         
         # Initialize progress tracker for the executor
-        progress_tracker = ui_progress.create_executor_progress_tracker(executor)
-        progress_tracker.start_tracking()
-        
+        progress_tracker = ui_progress.create_executor_progress_tracker(executor, show_header=False)
+        progress_tracker.start_tracking()        
+
+
         # Get strategy preview
         strategy_preview = await executor.get_strategy_preview()
         
@@ -70,11 +80,13 @@ async def run_assessment(document, framework, options):
         ui_ready_result = await executor.execute()
         
         # Stop progress tracking
-        progress_tracker.stop()
+        progress_tracker.stop_tracking()
         
         # Save result to file
         output_path = path_utils.save_assessment_result(ui_ready_result)
-        st.success(f"Assessment results saved to {output_path.name}")
+        
+        # Success message
+        st.success(f"Assessment completed successfully and saved to {output_path.name}")
         
         return ui_ready_result, strategy_preview
     except Exception as e:
@@ -97,99 +109,100 @@ def display_framework_selection():
     Returns:
         Selected framework or None if no framework selected
     """
-    with st.expander("Framework Selection", expanded=True):
-        # List available frameworks
-        framework_files = path_utils.list_files("frameworks", ".json")
-        framework_names = []
+    #st.markdown("### Framework Selection")
+    
+    # List available frameworks
+    framework_files = path_utils.list_files("frameworks", ".json")
+    framework_names = []
+    
+    for file_path in framework_files:
+        try:
+            with open(file_path, "r") as f:
+                framework = json.load(f)
+                name = framework.get("name", file_path.stem)
+                framework_names.append((name, file_path.name))
+        except Exception as e:
+            st.warning(f"Failed to load framework {file_path.name}: {str(e)}")
+    
+    # Sort by name
+    framework_names.sort(key=lambda x: x[0])
+    
+    # Add framework options
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # Create list of names for selectbox
+        framework_options = [name for name, _ in framework_names]
+        if not framework_options:
+            st.info("No frameworks available. Please create a framework first.")
+            return None
+            
+        selected_index = 0
         
-        for file_path in framework_files:
+        # Find previously selected framework if exists
+        if hasattr(st.session_state, "selected_framework_name"):
+            if st.session_state.selected_framework_name in framework_options:
+                selected_index = framework_options.index(st.session_state.selected_framework_name)
+        
+        selected_framework_name = st.selectbox(
+            "Select Assessment Framework",
+            options=framework_options,
+            index=selected_index,
+            key="framework_selector"
+        )
+        
+        # Store selection in session state
+        st.session_state.selected_framework_name = selected_framework_name
+        
+        # Find the file for the selected framework
+        selected_file = None
+        for name, file_name in framework_names:
+            if name == selected_framework_name:
+                selected_file = file_name
+                break
+        
+        if selected_file:
+            # Load the framework
             try:
-                with open(file_path, "r") as f:
-                    framework = json.load(f)
-                    name = framework.get("name", file_path.stem)
-                    framework_names.append((name, file_path.name))
+                framework = path_utils.load_json("frameworks", selected_file)
+                st.session_state.framework = framework
             except Exception as e:
-                st.warning(f"Failed to load framework {file_path.name}: {str(e)}")
-        
-        # Sort by name
-        framework_names.sort(key=lambda x: x[0])
-        
-        # Add framework options
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            # Create list of names for selectbox
-            framework_options = [name for name, _ in framework_names]
-            if not framework_options:
-                st.info("No frameworks available. Please create a framework first.")
+                st.error(f"Failed to load framework: {str(e)}")
                 return None
-                
-            selected_index = 0
-            
-            # Find previously selected framework if exists
-            if hasattr(st.session_state, "selected_framework_name"):
-                if st.session_state.selected_framework_name in framework_options:
-                    selected_index = framework_options.index(st.session_state.selected_framework_name)
-            
-            selected_framework_name = st.selectbox(
-                "Select Assessment Framework",
-                options=framework_options,
-                index=selected_index,
-                key="framework_selector"
-            )
-            
-            # Store selection in session state
-            st.session_state.selected_framework_name = selected_framework_name
-            
-            # Find the file for the selected framework
-            selected_file = None
-            for name, file_name in framework_names:
-                if name == selected_framework_name:
-                    selected_file = file_name
-                    break
-            
-            if selected_file:
-                # Load the framework
-                try:
-                    framework = path_utils.load_json("frameworks", selected_file)
-                    st.session_state.framework = framework
-                except Exception as e:
-                    st.error(f"Failed to load framework: {str(e)}")
-                    return None
-            else:
-                st.error("Failed to find selected framework file")
-                return None
+        else:
+            st.error("Failed to find selected framework file")
+            return None
 
-        with col2:
-            st.write("")
-            st.write("")
-            if st.button("Create New Framework", key="create_framework_btn"):
-                st.session_state.current_page = "02_Framework_Builder"
-                st.rerun()
+    with col2:
+        st.write("")
+        st.write("")
+        if st.button("Create New Framework", key="create_framework_btn"):
+            st.session_state.current_page = "02_Framework_Builder"
+            st.rerun()
+    
+    # Display framework info
+    if hasattr(st.session_state, "framework"):
+        framework = st.session_state.framework
         
-        # Display framework info
-        if hasattr(st.session_state, "framework"):
-            framework = st.session_state.framework
-            
-            # Count dimensions and criteria
-            dimension_count = len(framework.get("dimensions", []))
-            criteria_count = sum(len(dimension.get("criteria", [])) for dimension in framework.get("dimensions", []))
-            
-            # Create metrics
-            metrics = [
-                {"label": "Dimensions", "value": dimension_count},
-                {"label": "Criteria", "value": criteria_count},
-                {"label": "Framework ID", "value": framework.get("id", "unknown")}
-            ]
-            
-            ui_components.metric_row(metrics)
-            
-            # Display framework description if available
-            description = framework.get("description")
-            if description:
-                st.markdown(f"**Description:** {description}")
-            
-            return framework
+        # Count dimensions and criteria
+        dimension_count = len(framework.get("dimensions", []))
+        criteria_count = sum(len(dimension.get("criteria", [])) for dimension in framework.get("dimensions", []))
+        
+        # Create metrics
+        metrics = [
+            {"label": "Dimensions", "value": dimension_count},
+            {"label": "Criteria", "value": criteria_count},
+            {"label": "Framework ID", "value": framework.get("id", "unknown")}
+        ]
+        
+        ui_components.metric_row(metrics)
+        
+        # Display framework description if available
+        description = framework.get("description")
+        if description:
+            st.markdown(f"**Description:** {description}")
+        
+        return framework
     
     return None
 
@@ -202,79 +215,82 @@ def display_document_upload():
     """
     uploaded_document = None
     
-    with st.expander("Document Upload", expanded=True):
-        col1, col2 = st.columns([3, 1])
+    #st.markdown("### Document Upload")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # File uploader
+        uploaded_file = st.file_uploader(
+            "Upload a document to assess", 
+            type=["txt", "md", "rst", "csv", "json"],
+            key="document_uploader"
+        )
         
-        with col1:
-            # File uploader
-            uploaded_file = st.file_uploader(
-                "Upload a document to assess", 
-                type=["txt", "md", "rst", "csv", "json"],
-                key="document_uploader"
+        # Check if a file was uploaded
+        if uploaded_file is not None:
+            # Process the file
+            try:
+                uploaded_document = Document.from_uploaded_file(uploaded_file)
+                st.session_state.document = uploaded_document
+                st.success(f"Document uploaded successfully: {uploaded_file.name}")
+            except Exception as e:
+                st.error(f"Failed to process document: {str(e)}")
+        
+        # Alternative: text input
+        if not uploaded_file:
+            st.markdown("#### Or paste document text")
+            document_text = st.text_area(
+                "Paste document text here",
+                height=150,
+                key="document_text",
+                help="Paste the document text to assess"
             )
             
-            # Check if a file was uploaded
-            if uploaded_file is not None:
-                # Process the file
+            if document_text:
                 try:
-                    uploaded_document = Document.from_uploaded_file(uploaded_file)
+                    filename = "pasted_document.txt"
+                    if "paste_filename" in st.session_state:
+                        filename = st.session_state.paste_filename
+                        
+                    uploaded_document = Document.from_text(document_text, filename=filename)
                     st.session_state.document = uploaded_document
-                    st.success(f"Document uploaded successfully: {uploaded_file.name}")
                 except Exception as e:
-                    st.error(f"Failed to process document: {str(e)}")
-            
-            # Alternative: text input
-            if not uploaded_file:
-                st.markdown("#### Or paste document text")
-                document_text = st.text_area(
-                    "Paste document text here",
-                    height=150,
-                    key="document_text",
-                    help="Paste the document text to assess"
-                )
-                
-                if document_text:
-                    try:
-                        filename = "pasted_document.txt"
-                        if "paste_filename" in st.session_state:
-                            filename = st.session_state.paste_filename
-                            
-                        uploaded_document = Document.from_text(document_text, filename=filename)
-                        st.session_state.document = uploaded_document
-                    except Exception as e:
-                        st.error(f"Failed to process document text: {str(e)}")
-        
-        with col2:
-            # Document name field for pasted text
-            paste_filename = st.text_input(
-                "Document Name (for pasted text)",
-                value="document.txt",
-                key="paste_filename",
-                help="Enter a name for the pasted document"
-            )
+                    st.error(f"Failed to process document text: {str(e)}")
+    
+    with col2:
+        # Document name field for pasted text
+        paste_filename = st.text_input(
+            "Document Name (for pasted text)",
+            value="document.txt",
+            key="paste_filename",
+            help="Enter a name for the pasted document"
+        )
 
-                    # Display document info if available
-        if hasattr(st.session_state, "document") and st.session_state.document is not None:
-            document = st.session_state.document
-            summary = document.get_summary()
+    # Display document info if available
+    if hasattr(st.session_state, "document") and st.session_state.document is not None:
+        document = st.session_state.document
+        summary = document.get_summary()
+        
+        # Create metrics
+        metrics = [
+            {"label": "Words", "value": summary.get("word_count", 0)},
+            {"label": "Characters", "value": summary.get("character_count", 0)},
+            {"label": "Est. Tokens", "value": summary.get("estimated_tokens", 0)}
+        ]
+        
+        ui_components.metric_row(metrics)
+        
+        # Display document preview
+        st.markdown("##### Document Preview")
+        preview_length = min(len(document.text), 2000)
+        preview_text = document.text[:preview_length]
+        if len(document.text) > preview_length:
+            preview_text += "..."
             
-            # Create metrics
-            metrics = [
-                {"label": "Words", "value": summary.get("word_count", 0)},
-                {"label": "Characters", "value": summary.get("character_count", 0)},
-                {"label": "Est. Tokens", "value": summary.get("estimated_tokens", 0)}
-            ]
-            
-            ui_components.metric_row(metrics)
-            
-            # Display document preview (without an expander)
-            st.markdown("##### Document Preview")
-            preview_length = min(len(document.text), 2000)
-            st.markdown(f"```\n{document.text[:preview_length]}\n" + 
-                       ("..." if len(document.text) > preview_length else "") + 
-                       "\n```")
-            
-            return document
+        st.code(preview_text, language=None)
+        
+        return document
     
     return uploaded_document
 
@@ -287,7 +303,11 @@ def display_assessment_options():
     """
     options = {}
     
-    with st.expander("Assessment Options", expanded=False):
+    #st.markdown("### Assessment Options")
+    
+    tabs = st.tabs(["Basic Options", "Advanced Options"])
+    
+    with tabs[0]:
         col1, col2 = st.columns(2)
         
         with col1:
@@ -317,8 +337,9 @@ def display_assessment_options():
                 help="Select the type of report to generate"
             )
             options["report_type"] = report_type
-            
-            # Add to document options
+        
+        with col2:
+            # Assessment type options
             include_evidence = st.checkbox(
                 "Include Evidence", 
                 value=True, 
@@ -326,8 +347,37 @@ def display_assessment_options():
                 help="Include evidence references in the assessment"
             )
             options["include_evidence"] = include_evidence
+            
+            include_confidence = st.checkbox(
+                "Include Confidence Scores", 
+                value=True, 
+                key="include_confidence",
+                help="Include confidence scores in the assessment"
+            )
+            options["include_confidence"] = include_confidence
+            
+            # Inference option
+            infer_missing = st.checkbox(
+                "Infer Missing Assessments", 
+                value=True, 
+                key="infer_missing",
+                help="Attempt to assess criteria even without direct evidence"
+            )
+            options["infer_missing"] = infer_missing
+            
+            # Assessment reliability labeling
+            show_assessment_types = st.checkbox(
+                "Show Assessment Types", 
+                value=True, 
+                key="show_assessment_types",
+                help="Clearly label direct vs. inferred assessments"
+            )
+            options["include_assessment_types"] = show_assessment_types
+    
+    with tabs[1]:
+        col1, col2 = st.columns(2)
         
-        with col2:
+        with col1:
             # Extraction strategy options
             extraction_strategy = st.selectbox(
                 "Extraction Strategy",
@@ -350,63 +400,56 @@ def display_assessment_options():
             )
             options["confidence_threshold"] = confidence_threshold
             
-            # Add to document options
-            include_confidence = st.checkbox(
-                "Include Confidence Scores", 
-                value=True, 
-                key="include_confidence",
-                help="Include confidence scores in the assessment"
+            # Direct assessment threshold
+            direct_rating_threshold = st.slider(
+                "Direct Assessment Threshold",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.7,
+                step=0.05,
+                key="direct_rating_threshold",
+                help="Confidence threshold for direct assessments"
             )
-            options["include_confidence"] = include_confidence
+            options["direct_rating_threshold"] = direct_rating_threshold
         
-        # Inference option
-        infer_missing = st.checkbox(
-            "Infer Missing Assessments", 
-            value=True, 
-            key="infer_missing",
-            help="Attempt to assess criteria even without direct evidence"
-        )
-        options["infer_missing"] = infer_missing
-        
-        # Advanced options section - not inside an expander
-        st.markdown("##### Advanced Options")
-        # Parallel processing options
-        max_concurrent = st.slider(
-            "Max Concurrent Extractors",
-            min_value=1,
-            max_value=5,
-            value=3,
-            step=1,
-            help="Maximum number of extractors to run in parallel"
-        )
-        options["max_concurrent"] = max_concurrent
-        
-        # Chunking options
-        chunking_method = st.selectbox(
-            "Chunking Method",
-            options=["auto", "fixed_size", "paragraph", "semantic"],
-            index=0,
-            key="chunking_method",
-            help="Method for dividing the document into chunks"
-        )
-        options["chunking_method"] = chunking_method
-        
-        if chunking_method == "fixed_size":
-            chunk_size = st.slider(
-                "Chunk Size",
-                min_value=1000,
-                max_value=15000,
-                value=8000,
-                step=1000,
-                help="Size of each document chunk in characters"
+        with col2:
+            # Parallel processing options
+            max_concurrent = st.slider(
+                "Max Concurrent Extractors",
+                min_value=1,
+                max_value=5,
+                value=3,
+                step=1,
+                help="Maximum number of extractors to run in parallel"
             )
-            options["chunk_size"] = chunk_size
+            options["max_concurrent"] = max_concurrent
+            
+            # Chunking options
+            chunking_method = st.selectbox(
+                "Chunking Method",
+                options=["auto", "fixed_size", "paragraph", "semantic"],
+                index=0,
+                key="chunking_method",
+                help="Method for dividing the document into chunks"
+            )
+            options["chunking_method"] = chunking_method
+            
+            if chunking_method == "fixed_size":
+                chunk_size = st.slider(
+                    "Chunk Size",
+                    min_value=1000,
+                    max_value=15000,
+                    value=8000,
+                    step=1000,
+                    help="Size of each document chunk in characters"
+                )
+                options["chunk_size"] = chunk_size
         
-        return options
+    return options
 
 def display_previous_assessments():
     """Display previous assessment results that the user can reload."""
-    st.subheader("Previous Assessments")
+    st.markdown("### Previous Assessments")
     
     # List assessment output files
     assessment_files = path_utils.list_files("outputs", ".json")
@@ -460,8 +503,6 @@ def display_previous_assessments():
     
     # Display as a table
     if data:
-        st.write("Recent assessments:")
-        
         # Create a dataframe for display
         import pandas as pd
         df = pd.DataFrame(data)
@@ -472,31 +513,36 @@ def display_previous_assessments():
         st.dataframe(display_df, use_container_width=True)
         
         # Add a load button
-        selected_indices = st.multiselect(
-            "Select assessment to load",
-            options=range(len(data)),
-            format_func=lambda i: f"{data[i]['Framework']} - {data[i]['Date']}"
-        )
+        cols = st.columns([3, 1])
         
-        if selected_indices and st.button("Load Selected Assessment"):
-            selected_path = data[selected_indices[0]]["Path"]
-            try:
-                # Load the selected assessment
-                with open(selected_path, "r") as f:
-                    assessment_result = json.load(f)
-                
-                # Store in session state
-                st.session_state.assessment_result = assessment_result
-                
-                # Extract strategy if available
-                strategy_preview = assessment_result.get("strategy")
-                if strategy_preview:
-                    st.session_state.strategy_preview = strategy_preview
-                
-                st.success(f"Loaded assessment: {selected_path.name}")
-                st.experimental_rerun()
-            except Exception as e:
-                st.error(f"Failed to load assessment: {str(e)}")
+        with cols[0]:
+            selected_indices = st.selectbox(
+                "Select assessment to load",
+                options=range(len(data)),
+                format_func=lambda i: f"{data[i]['Framework']} - {data[i]['Date']}",
+                key="assessment_selector"
+            )
+        
+        with cols[1]:
+            if st.button("Load Assessment", key="load_assessment_btn"):
+                selected_path = data[selected_indices]["Path"]
+                try:
+                    # Load the selected assessment
+                    with open(selected_path, "r") as f:
+                        assessment_result = json.load(f)
+                    
+                    # Store in session state
+                    st.session_state.assessment_result = assessment_result
+                    
+                    # Extract strategy if available
+                    strategy_preview = assessment_result.get("strategy")
+                    if strategy_preview:
+                        st.session_state.strategy_preview = strategy_preview
+                    
+                    st.success(f"Loaded assessment: {selected_path.name}")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"Failed to load assessment: {str(e)}")
 
 def main():
     """Main application function for framework assessment."""
@@ -504,7 +550,7 @@ def main():
     st.title("🧠 Framework Assessment")
     st.markdown(
         """
-        Assess a document against a structured framework using our advanced AI system.
+        Assess a document against a structured framework using our enhanced AI system.
         Upload a document, select a framework, and get a comprehensive assessment.
         """
     )
@@ -521,21 +567,32 @@ def main():
     tabs = st.tabs(["Assess New Document", "View Previous Assessments"])
     
     with tabs[0]:
-        # Display framework selection and document upload
-        framework = display_framework_selection()
-        document = display_document_upload()
+        # Create layout with cards
+        # Each section is a clean, professional card
         
-        # Display assessment options
+        framework_card = ui_components.card_container("Framework Selection")
+        framework = display_framework_selection()
+        ui_components.end_card_container()
+        
+        document_card = ui_components.card_container("Document Upload")
+        document = display_document_upload()
+        ui_components.end_card_container()
+        
+        options_card = ui_components.card_container("Assessment Options")
         options = display_assessment_options()
+        ui_components.end_card_container()
         
         # Add assessment button and handle assessment process
-        start_assessment = st.button(
-            "Start Assessment", 
-            key="start_assessment_btn", 
-            type="primary", 
-            disabled=not (framework and document),
-            help="Start the assessment process"
-        )
+        start_col, _ = st.columns([1, 3])
+        with start_col:
+            start_assessment = st.button(
+                "Start Assessment", 
+                key="start_assessment_btn", 
+                type="primary", 
+                disabled=not (framework and document),
+                help="Start the assessment process",
+                use_container_width=True
+            )
         
         if start_assessment:
             if not framework:
@@ -546,8 +603,12 @@ def main():
                 st.error("Please upload or paste a document before starting assessment.")
                 return
             
-            # Create a spinner while assessment is running
-            with st.spinner("Running assessment. This may take a few minutes..."):
+            # Create progress container for tracking
+            progress_container = st.container()
+            with progress_container:
+                st.markdown("### Assessment Progress")
+                
+                # Create a spinner while assessment is running
                 try:
                     # Define a helper function to run the async code
                     def run_async_assessment():
@@ -566,7 +627,9 @@ def main():
                     st.session_state.strategy_preview = strategy_preview
                     
                     # Display results
-                    ui_results.display_assessment_results(ui_ready_result, strategy_preview)
+                    display_results_container = st.container()
+                    with display_results_container:
+                        ui_results.display_assessment_results(ui_ready_result, strategy_preview)
                     
                 except Exception as e:
                     st.error(f"Assessment failed: {str(e)}")
@@ -582,5 +645,19 @@ def main():
         # Display previous assessments
         display_previous_assessments()
 
+def initialize_session_state():
+    """Initialize session state for the assessment page."""
+    if "initialized" not in st.session_state:
+        st.session_state.initialized = True
+        st.session_state.document = None
+        st.session_state.framework = None
+        st.session_state.strategy = None
+        st.session_state.assessment_result = None
+    
+    # Set default model if not already set
+    if "model" not in st.session_state:
+        st.session_state.model = "gpt-3.5-turbo"
+
 if __name__ == "__main__":
+    initialize_session_state()
     main()

@@ -1,14 +1,15 @@
 """
-Base Agent - Foundation for all assessment agents
+Enhanced Base Agent - Improved foundation for all assessment agents
 
-This module provides the BaseAgent class, which serves as the foundation
-for all agents in the framework assessment system.
+This module provides an enhanced BaseAgent class with improvements for caching,
+structured output, and parallel processing capabilities.
 """
 
 import logging
 import json, re, os, sys
 import asyncio
 import time
+import hashlib
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Union, Tuple
 
@@ -17,7 +18,7 @@ from ..context import AssessmentContext
 
 class BaseAgent(ABC):
     """
-    Abstract base class for all assessment agents.
+    Enhanced abstract base class for all assessment agents.
     
     The BaseAgent provides:
     1. Standard context access methods
@@ -26,6 +27,9 @@ class BaseAgent(ABC):
     4. Progress tracking
     5. Token usage tracking
     6. Resource optimization
+    7. Caching for LLM calls
+    8. Structured output helpers
+    9. Parallel processing utilities
     
     All specialized agents should inherit from this base class.
     """
@@ -193,7 +197,8 @@ class BaseAgent(ABC):
         criterion_id: str,
         rating: Any,
         rationale: str,
-        confidence: Optional[float] = None
+        confidence: Optional[float] = None,
+        assessment_type: str = "direct"
     ) -> bool:
         """
         Set assessment for a criterion.
@@ -204,13 +209,30 @@ class BaseAgent(ABC):
             rating: Assessment rating (type depends on scoring method)
             rationale: Rationale for the assessment
             confidence: Optional confidence score (0.0-1.0)
+            assessment_type: Type of assessment ("direct", "inferred", "insufficient_evidence")
             
         Returns:
             True if assessment was set successfully, False otherwise
         """
-        result = self.context.set_criterion_assessment(
-            dimension_id, criterion_id, rating, rationale, confidence
-        )
+        # Add assessment type to the assessment data
+        assessment_data = {
+            "rating": rating,
+            "rationale": rationale,
+            "confidence": confidence,
+            "assessment_type": assessment_type,
+            "timestamp": time.time()
+        }
+        
+        # Try to set assessment with the expanded data
+        if hasattr(self.context, 'set_criterion_assessment_with_metadata'):
+            result = self.context.set_criterion_assessment_with_metadata(
+                dimension_id, criterion_id, assessment_data
+            )
+        else:
+            # Fall back to standard method if enhanced one is not available
+            result = self.context.set_criterion_assessment(
+                dimension_id, criterion_id, rating, rationale, confidence
+            )
         
         if result:
             # Record observation
@@ -218,7 +240,8 @@ class BaseAgent(ABC):
                 "dimension_id": dimension_id,
                 "criterion_id": criterion_id,
                 "rating": rating,
-                "confidence": confidence
+                "confidence": confidence,
+                "assessment_type": assessment_type
             })
             
         return result
@@ -390,7 +413,7 @@ class BaseAgent(ABC):
         return self._performance_metrics
     
     #
-    # LLM Interaction
+    # Enhanced LLM Interaction
     #
     
     async def _safe_llm_call(
@@ -497,8 +520,120 @@ class BaseAgent(ABC):
         self.stop_timer()  # Stop the timer
         raise last_error
 
-# Add to BaseAgent
+    async def _cached_llm_call(self, operation: str, content: Any, func_name: str, *args, **kwargs) -> Any:
+        """
+        Cache LLM call results to avoid repeated identical calls.
+        
+        Args:
+            operation: Name of the operation being cached
+            content: Content hash key for the cache
+            func_name: LLM function to call
+            *args, **kwargs: Arguments for the LLM function
+            
+        Returns:
+            Result from the LLM function (cached or fresh)
+        """
+        # Create a cache key
+        content_str = str(content)
+        content_hash = hashlib.md5(content_str.encode('utf-8')).hexdigest()
+        cache_key = f"{self.name}_{operation}_{content_hash}"
+        
+        # Initialize cache in context if not exists
+        if not hasattr(self.context, 'llm_cache'):
+            self.context.llm_cache = {}
+        
+        # Check cache
+        if cache_key in self.context.llm_cache:
+            self.logger.debug(f"Cache hit for {operation}")
+            return self.context.llm_cache[cache_key]
+        
+        # Call LLM if not cached
+        result = await self._safe_llm_call(func_name, *args, **kwargs)
+        
+        # Store result in cache
+        self.context.llm_cache[cache_key] = result
+        
+        return result
 
+    async def _structured_output_call(
+        self, 
+        prompt: str, 
+        output_schema: Dict[str, Any], 
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.2,
+        max_tokens: int = 2000
+    ) -> Dict[str, Any]:
+        """
+        Call LLM with structured output schema for consistent parsing.
+        
+        Args:
+            prompt: User prompt for the LLM
+            output_schema: JSON schema defining expected output structure
+            system_prompt: Optional system prompt to guide the LLM
+            temperature: Temperature parameter for generation
+            max_tokens: Maximum tokens for generation
+            
+        Returns:
+            Structured output from the LLM conforming to schema
+        """
+        try:
+            # Generate structured output using the LLM
+            result, usage = await self._safe_llm_call(
+                "generate_structured_output",
+                prompt=prompt,
+                output_schema=output_schema,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            # Return just the structured output (not usage)
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error in structured output call: {str(e)}")
+            
+            # Fall back to non-structured generation and try to extract JSON
+            self.logger.warning("Falling back to standard completion with JSON extraction")
+            
+            try:
+                # Create a prompt that requests JSON output
+                fallback_prompt = f"{prompt}\n\nPlease format your response as a valid JSON object."
+                
+                # Call standard completion
+                text_output, _ = await self._safe_llm_call(
+                    "generate_completion",
+                    prompt=fallback_prompt,
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                
+                # Try to extract JSON from the text output
+                import re
+                import json
+                
+                # Look for JSON block
+                json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text_output)
+                if json_match:
+                    json_str = json_match.group(1)
+                else:
+                    # Try to find any JSON object/array
+                    json_str = text_output
+                
+                # Parse JSON
+                parsed_json = json.loads(json_str)
+                return parsed_json
+                
+            except Exception as e2:
+                self.logger.error(f"Fallback JSON extraction also failed: {str(e2)}")
+                # Return minimal valid structure to avoid cascading errors
+                return {"error": f"Failed to generate structured output: {str(e)}"}
+
+    #
+    # Parallel Processing
+    #
+    
     async def process_in_batches(self, items, batch_size, process_fn, *args, **kwargs):
         """
         Process a list of items in batches with progress tracking.
@@ -540,8 +675,6 @@ class BaseAgent(ABC):
         Returns:
             List of results from all tasks
         """
-        import asyncio
-        
         # Create semaphore for concurrency control
         semaphore = asyncio.Semaphore(max_concurrent)
         
@@ -614,3 +747,95 @@ class BaseAgent(ABC):
         
         # Default: return as is
         return result_groups
+    
+    #
+    # Prompt Optimization
+    #
+    
+    def optimize_prompt(self, prompt: str, max_length: int = 4000) -> str:
+        """
+        Optimize prompt to reduce token usage while preserving key information.
+        
+        Args:
+            prompt: Original prompt text
+            max_length: Target maximum length
+            
+        Returns:
+            Optimized prompt text
+        """
+        # If prompt is already short enough, return it unchanged
+        if len(prompt) <= max_length:
+            return prompt
+        
+        # Import required modules
+        import re
+        
+        # Try to identify sections in the prompt
+        sections = re.findall(r'([A-Z][A-Z\s]+):\n(.*?)(?=\n[A-Z][A-Z\s]+:|$)', prompt, re.DOTALL)
+        
+        # If no sections found, perform simple truncation
+        if not sections:
+            # Simple truncation preserving beginning and end
+            half_length = max_length // 2
+            return prompt[:half_length] + "\n...\n" + prompt[-half_length:]
+        
+        # Calculate total length to reduce
+        excess_length = len(prompt) - max_length
+        
+        # Identify large sections to compress
+        section_lengths = [(title, content, len(content)) for title, content in sections]
+        section_lengths.sort(key=lambda x: x[2], reverse=True)
+        
+        # Start with the largest sections for compression
+        compressed_sections = {}
+        remaining_excess = excess_length
+        
+        for title, content, length in section_lengths:
+            # Skip small sections
+            if length < 500:
+                continue
+                
+            # Calculate how much to reduce this section
+            # Reduce proportionally to its size
+            reduction = min(remaining_excess, int(length * 0.6))
+            if reduction <= 0:
+                break
+                
+            # Compress the section
+            if "EVIDENCE" in title or "TEXT" in title:
+                # For evidence or text, preserve first and last parts
+                preserve = (length - reduction) // 2
+                compressed = content[:preserve] + "\n...\n" + content[-preserve:]
+            else:
+                # For other sections, try to preserve important sentences
+                sentences = re.split(r'(?<=[.!?])\s+', content)
+                if len(sentences) <= 3:
+                    # Too few sentences to compress meaningfully
+                    continue
+                    
+                # Keep first, last, and sample from middle
+                compressed = sentences[0] + " "
+                if len(sentences) > 5:
+                    compressed += sentences[1] + " "
+                compressed += "... "
+                if len(sentences) > 5:
+                    compressed += sentences[-2] + " "
+                compressed += sentences[-1]
+            
+            # Update tracking
+            compressed_sections[title] = compressed
+            remaining_excess -= (length - len(compressed))
+            
+            # Check if we've compressed enough
+            if remaining_excess <= 0:
+                break
+        
+        # Reconstruct the prompt with compressed sections
+        optimized_prompt = ""
+        for title, content in sections:
+            if title in compressed_sections:
+                optimized_prompt += f"{title}:\n{compressed_sections[title]}\n\n"
+            else:
+                optimized_prompt += f"{title}:\n{content}\n\n"
+        
+        return optimized_prompt

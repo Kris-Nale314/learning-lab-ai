@@ -38,6 +38,10 @@ The workbench uses a flexible multi-agent architecture powered by LangChain with
 
 4. **Interactive Exploration**: Users can review and modify assessment strategies, comparing different approaches to see what works best
 
+<p align="center">
+  <img src="docs/images/logicLearningLabAI.svg" alt="Learning Lab AI" width="80%"/>
+</p>
+
 ## 🔬 Technical Approach
 
 The system implements several key innovations:

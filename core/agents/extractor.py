@@ -1,14 +1,13 @@
 """
-Enhanced Extractor Agent - Deep evidence extraction with evidence consolidation
+Enhanced Extractor Agent - Improved evidence extraction with better relevance categorization
 
 This agent thoroughly analyzes document chunks to find ALL evidence relevant to its
-assigned criteria, then consolidates and summarizes the evidence for each criterion
-into a comprehensive "evidence packet" for the evaluator.
+assigned criteria, with improved relevance categorization and evidence consolidation.
 """
 
-import json
 import logging
 import asyncio
+import json
 from typing import Dict, Any, List, Optional, Tuple
 
 from core.agents.base import BaseAgent
@@ -16,13 +15,13 @@ from core.context import AssessmentContext
 
 class ExtractorAgent(BaseAgent):
     """
-    Extracts and consolidates evidence for assigned criteria across all document chunks.
+    Enhanced extractor agent with improved evidence categorization and consolidation.
     
     The Enhanced Extractor is responsible for:
     1. Deep analysis of all document chunks for assigned criteria
-    2. Finding all potential evidence, including indirect references
+    2. Finding all potential evidence with better relevance and sentiment categorization
     3. Consolidating evidence for each criterion across all chunks
-    4. Creating comprehensive evidence summaries for each criterion
+    4. Creating comprehensive evidence summaries with direct/inferred recommendations
     5. Providing confidence and relevance assessments for the evidence
     6. Processing chunks in parallel for efficiency
     7. Delivering a clean "evidence packet" to the evaluator for each criterion
@@ -188,30 +187,25 @@ class ExtractorAgent(BaseAgent):
             tasks.append(task)
         
         # Process batches with concurrency control
-        completed = 0
-        for i in range(0, len(tasks), self.max_concurrent):
-            batch_tasks = tasks[i:i+self.max_concurrent]
-            batch_results = await asyncio.gather(*batch_tasks)
-            
-            # Update progress
-            completed += len(batch_tasks)
-            progress = completed / total_batches
-            self.update_progress(progress, f"Processed {completed}/{total_batches} batches")
-            
-            # Aggregate results
-            for batch_result in batch_results:
-                # Update by_chunk results
-                for chunk_id, chunk_data in batch_result.get("by_chunk", {}).items():
-                    results["by_chunk"][chunk_id] = chunk_data
+        batch_results = await self.run_parallel_tasks(tasks, self.max_concurrent)
+        
+        # Aggregate results
+        for batch_result in batch_results:
+            if not batch_result:
+                continue
                 
-                # Update by_criterion results
-                for criterion_key, evidence_list in batch_result.get("by_criterion", {}).items():
-                    if criterion_key not in results["by_criterion"]:
-                        results["by_criterion"][criterion_key] = []
-                    results["by_criterion"][criterion_key].extend(evidence_list)
-                
-                # Update total evidence count
-                results["total_evidence"] += batch_result.get("total_evidence", 0)
+            # Update by_chunk results
+            for chunk_id, chunk_data in batch_result.get("by_chunk", {}).items():
+                results["by_chunk"][chunk_id] = chunk_data
+            
+            # Update by_criterion results
+            for criterion_key, evidence_list in batch_result.get("by_criterion", {}).items():
+                if criterion_key not in results["by_criterion"]:
+                    results["by_criterion"][criterion_key] = []
+                results["by_criterion"][criterion_key].extend(evidence_list)
+            
+            # Update total evidence count
+            results["total_evidence"] += batch_result.get("total_evidence", 0)
         
         return results
     
@@ -322,11 +316,21 @@ For each piece of evidence you find, provide:
 3. The exact text passage that constitutes evidence (direct quote)
 4. An explanation of why this is relevant to the criterion
 5. A confidence score (0.0-1.0) indicating how strongly this relates to the criterion
-6. The relevance level (Direct, Indirect, Contextual, Implied)
+6. The relevance level:
+   - Direct: Explicitly addresses the criterion
+   - Indirect: Implicitly relates to the criterion
+   - Contextual: Provides important context for understanding
+   - Implied: Suggests something about the criterion without stating it
+7. The sentiment of this evidence:
+   - Positive: Supports a positive assessment of the criterion
+   - Negative: Indicates a deficiency or problem
+   - Neutral: Factual or balanced information
+8. Sufficiency indicator - how strongly this single piece of evidence could support a rating:
+   - Strong: Could substantially influence a rating on its own
+   - Moderate: Contributes meaningfully but needs corroboration
+   - Weak: Minor support that primarily adds context
 
-Be thorough - extract ANY text that might be relevant, even indirectly. Consider tone, word choice, 
-and contextual implications. Look for both positive and negative evidence.
-
+Be thorough - extract ANY text that might be relevant, even indirectly.
 Format your response as a structured list of evidence items."""
 
         # Define the evidence output schema
@@ -343,7 +347,9 @@ Format your response as a structured list of evidence items."""
                             "text": {"type": "string"},
                             "relevance_explanation": {"type": "string"},
                             "confidence": {"type": "number"},
-                            "relevance_level": {"type": "string", "enum": ["Direct", "Indirect", "Contextual", "Implied"]}
+                            "relevance_level": {"type": "string", "enum": ["Direct", "Indirect", "Contextual", "Implied"]},
+                            "sentiment": {"type": "string", "enum": ["Positive", "Negative", "Neutral"]},
+                            "sufficiency_indicator": {"type": "string", "enum": ["Strong", "Moderate", "Weak"]}
                         },
                         "required": ["dimension_id", "criterion_id", "text", "relevance_explanation", "confidence"]
                     }
@@ -352,8 +358,11 @@ Format your response as a structured list of evidence items."""
             "required": ["evidence"]
         }
         
-        # Call LLM for extraction
-        extracted_evidence, _ = await self._safe_llm_call(
+        # Call LLM for extraction using cached call for efficiency
+        cache_key = f"extract_evidence_{chunk_id}"
+        extracted_evidence = await self._cached_llm_call(
+            "extract_evidence",
+            f"{chunk_id}_{','.join(c['criterion_id'] for c in assigned_criteria)}",
             "generate_structured_output",
             prompt=human_prompt,
             output_schema=evidence_schema,
@@ -375,6 +384,8 @@ Format your response as a structured list of evidence items."""
             relevance_explanation = evidence_item.get("relevance_explanation", "")
             confidence = evidence_item.get("confidence", 0.8)  # Default if not provided
             relevance_level = evidence_item.get("relevance_level", "Direct")
+            sentiment = evidence_item.get("sentiment", "Neutral")
+            sufficiency_indicator = evidence_item.get("sufficiency_indicator", "Moderate")
             
             if not dimension_id or not criterion_id or not text:
                 self.logger.warning(f"Skipping invalid evidence item: {evidence_item}")
@@ -390,7 +401,9 @@ Format your response as a structured list of evidence items."""
                 "extraction_type": self.extraction_type,
                 "relevance_explanation": relevance_explanation,
                 "confidence": confidence,
-                "relevance_level": relevance_level
+                "relevance_level": relevance_level,
+                "sentiment": sentiment,
+                "sufficiency_indicator": sufficiency_indicator
             }
             
             # Find location in chunk if possible
@@ -424,7 +437,10 @@ Format your response as a structured list of evidence items."""
                 "text": text,
                 "relevance_explanation": relevance_explanation,
                 "confidence": confidence,
-                "relevance_level": relevance_level
+                "relevance_level": relevance_level,
+                "sentiment": sentiment,
+                "sufficiency_indicator": sufficiency_indicator,
+                "metadata": metadata
             })
         
         return {
@@ -440,7 +456,7 @@ Format your response as a structured list of evidence items."""
     ) -> Dict[str, Dict[str, Any]]:
         """
         Consolidate evidence for each criterion across all chunks,
-        creating a comprehensive evidence summary for the evaluator.
+        creating a comprehensive evidence summary with direct/inferred recommendation.
         
         Args:
             extraction_results: Results from evidence extraction
@@ -465,14 +481,52 @@ Format your response as a structured list of evidence items."""
             
             # Create consolidated evidence summary
             if evidence_list:
-                summary = await self._create_consolidated_evidence_summary(evidence_list, criterion)
+                # Group evidence by relevance and sentiment
+                grouped_evidence = {
+                    "direct": {
+                        "positive": [],
+                        "negative": [],
+                        "neutral": []
+                    },
+                    "indirect": {
+                        "positive": [],
+                        "negative": [],
+                        "neutral": []
+                    },
+                    "contextual_implied": []
+                }
+                
+                # Sort evidence into groups
+                for evidence in evidence_list:
+                    relevance = evidence.get("relevance_level", "Direct")
+                    sentiment = evidence.get("sentiment", "Neutral")
+                    
+                    if relevance in ["Contextual", "Implied"]:
+                        grouped_evidence["contextual_implied"].append(evidence)
+                    elif relevance in ["Direct", "Indirect"]:
+                        normalized_relevance = relevance.lower()
+                        normalized_sentiment = sentiment.lower()
+                        # Make sure dictionary keys exist
+                        if normalized_sentiment not in grouped_evidence.get(normalized_relevance, {}):
+                            if normalized_relevance not in grouped_evidence:
+                                grouped_evidence[normalized_relevance] = {}
+                            grouped_evidence[normalized_relevance][normalized_sentiment] = []
+                        grouped_evidence[normalized_relevance][normalized_sentiment].append(evidence)
+                
+                # Create consolidated summary
+                summary = await self._create_consolidated_evidence_summary(evidence_list, criterion, grouped_evidence)
                 
                 consolidated_evidence[key] = {
                     "dimension_id": dimension_id,
                     "criterion_id": criterion_id,
                     "evidence_count": len(evidence_list),
-                    "comprehensive_summary": summary,
-                    "evidence_by_relevance": self._organize_evidence_by_relevance(evidence_list),
+                    "comprehensive_analysis": summary.get("comprehensive_analysis", ""),
+                    "key_patterns": summary.get("key_patterns", []),
+                    "contradictions": summary.get("contradictions", []),
+                    "direct_assessment_justified": summary.get("direct_assessment_justified", "NO"),
+                    "suggested_rating_range": summary.get("suggested_rating_range", ""),
+                    "confidence_level": summary.get("confidence_level", 0.5),
+                    "evidence_by_category": self._get_evidence_category_counts(grouped_evidence),
                     "evidence_items": evidence_list
                 }
                 
@@ -483,8 +537,9 @@ Format your response as a structured list of evidence items."""
                     "dimension_id": dimension_id,
                     "criterion_id": criterion_id,
                     "evidence_count": 0,
-                    "comprehensive_summary": "No evidence found for this criterion.",
-                    "evidence_by_relevance": {},
+                    "comprehensive_analysis": "No evidence found for this criterion.",
+                    "direct_assessment_justified": "NO",
+                    "evidence_by_category": {},
                     "evidence_items": []
                 }
                 
@@ -494,104 +549,236 @@ Format your response as a structured list of evidence items."""
         
         return consolidated_evidence
     
-    def _organize_evidence_by_relevance(self, evidence_list: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    def _get_evidence_category_counts(self, grouped_evidence: Dict[str, Any]) -> Dict[str, int]:
         """
-        Organize evidence by relevance level for easier evaluation.
+        Get counts of evidence by category for reporting.
         
         Args:
-            evidence_list: List of evidence items
+            grouped_evidence: Evidence grouped by relevance and sentiment
             
         Returns:
-            Evidence organized by relevance level
+            Dictionary of evidence counts by category
         """
-        by_relevance = {
-            "Direct": [],
-            "Indirect": [],
-            "Contextual": [],
-            "Implied": []
-        }
+        counts = {}
         
-        for evidence in evidence_list:
-            relevance_level = evidence.get("relevance_level", "Direct")
-            if relevance_level in by_relevance:
-                by_relevance[relevance_level].append(evidence)
+        # Count direct evidence by sentiment
+        for sentiment in ["positive", "negative", "neutral"]:
+            direct_count = len(grouped_evidence.get("direct", {}).get(sentiment, []))
+            if direct_count > 0:
+                counts[f"direct_{sentiment}"] = direct_count
         
-        # Remove empty categories
-        return {k: v for k, v in by_relevance.items() if v}
+        # Count indirect evidence by sentiment
+        for sentiment in ["positive", "negative", "neutral"]:
+            indirect_count = len(grouped_evidence.get("indirect", {}).get(sentiment, []))
+            if indirect_count > 0:
+                counts[f"indirect_{sentiment}"] = indirect_count
+        
+        # Count contextual/implied evidence
+        contextual_implied_count = len(grouped_evidence.get("contextual_implied", []))
+        if contextual_implied_count > 0:
+            counts["contextual_implied"] = contextual_implied_count
+        
+        # Add total counts
+        counts["total"] = (
+            sum(len(items) for sentiment, items in grouped_evidence.get("direct", {}).items()) +
+            sum(len(items) for sentiment, items in grouped_evidence.get("indirect", {}).items()) +
+            len(grouped_evidence.get("contextual_implied", []))
+        )
+        
+        return counts
     
     async def _create_consolidated_evidence_summary(
         self, 
         evidence_list: List[Dict[str, Any]], 
-        criterion: Dict[str, Any]
-    ) -> str:
+        criterion: Dict[str, Any],
+        grouped_evidence: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
-        Create a comprehensive summary of all evidence for a criterion.
-        This will be the primary evidence packet provided to the evaluator.
+        Create a comprehensive summary of all evidence for a criterion with
+        a recommendation on whether direct assessment is justified.
         
         Args:
             evidence_list: List of all evidence items for the criterion
             criterion: Criterion information
+            grouped_evidence: Evidence grouped by relevance and sentiment
             
         Returns:
-            Comprehensive evidence summary
+            Comprehensive evidence summary with assessment recommendation
         """
-        # Format evidence for prompt
-        evidence_text = ""
-        for i, evidence in enumerate(evidence_list):
-            evidence_text += f"Evidence {i+1}:\n"
-            evidence_text += f"Text: {evidence.get('text', '')}\n"
-            evidence_text += f"Relevance: {evidence.get('relevance_explanation', '')}\n"
-            evidence_text += f"Confidence: {evidence.get('confidence', '')}\n"
-            evidence_text += f"Level: {evidence.get('relevance_level', 'Direct')}\n\n"
+        # Format evidence for each group
+        direct_positive = self._format_evidence_group(
+            grouped_evidence.get("direct", {}).get("positive", [])
+        )
+        direct_negative = self._format_evidence_group(
+            grouped_evidence.get("direct", {}).get("negative", [])
+        )
+        direct_neutral = self._format_evidence_group(
+            grouped_evidence.get("direct", {}).get("neutral", [])
+        )
+        indirect_positive = self._format_evidence_group(
+            grouped_evidence.get("indirect", {}).get("positive", [])
+        )
+        indirect_negative = self._format_evidence_group(
+            grouped_evidence.get("indirect", {}).get("negative", [])
+        )
+        indirect_neutral = self._format_evidence_group(
+            grouped_evidence.get("indirect", {}).get("neutral", [])
+        )
+        contextual_implied = self._format_evidence_group(
+            grouped_evidence.get("contextual_implied", [])
+        )
         
-        # Create prompt
+        # Counts for each category
+        direct_count = (
+            len(grouped_evidence.get("direct", {}).get("positive", [])) +
+            len(grouped_evidence.get("direct", {}).get("negative", [])) +
+            len(grouped_evidence.get("direct", {}).get("neutral", []))
+        )
+        indirect_count = (
+            len(grouped_evidence.get("indirect", {}).get("positive", [])) +
+            len(grouped_evidence.get("indirect", {}).get("negative", [])) +
+            len(grouped_evidence.get("indirect", {}).get("neutral", []))
+        )
+        contextual_implied_count = len(grouped_evidence.get("contextual_implied", []))
+        
+        # Format the criterion information
         criterion_name = criterion.get("criterion_name", "")
         criterion_question = criterion.get("criterion_question", "")
         dimension_name = criterion.get("dimension_name", "")
-        scoring_definitions = criterion.get("scoring_definitions", {})
         
         # Format scoring definitions
+        scoring_definitions = criterion.get("scoring_definitions", {})
         scoring_text = ""
         for score, definition in scoring_definitions.items():
             scoring_text += f"- Score {score}: {definition}\n"
         
+        # Create prompt for the comprehensive analysis
         prompt = f"""Create a comprehensive analysis of all evidence related to the following criterion:
 
 CRITERION: {criterion_name}
 QUESTION: {criterion_question}
 DIMENSION: {dimension_name}
 
+EVIDENCE SUMMARY:
+- Direct Evidence: {direct_count} items
+- Indirect Evidence: {indirect_count} items
+- Contextual/Implied Evidence: {contextual_implied_count} items
+- Total Evidence: {len(evidence_list)} items
+
+DIRECT POSITIVE EVIDENCE ({len(grouped_evidence.get("direct", {}).get("positive", []))}):
+{direct_positive}
+
+DIRECT NEGATIVE EVIDENCE ({len(grouped_evidence.get("direct", {}).get("negative", []))}):
+{direct_negative}
+
+DIRECT NEUTRAL EVIDENCE ({len(grouped_evidence.get("direct", {}).get("neutral", []))}):
+{direct_neutral}
+
+INDIRECT POSITIVE EVIDENCE ({len(grouped_evidence.get("indirect", {}).get("positive", []))}):
+{indirect_positive}
+
+INDIRECT NEGATIVE EVIDENCE ({len(grouped_evidence.get("indirect", {}).get("negative", []))}):
+{indirect_negative}
+
+INDIRECT NEUTRAL EVIDENCE ({len(grouped_evidence.get("indirect", {}).get("neutral", []))}):
+{indirect_neutral}
+
+CONTEXTUAL/IMPLIED EVIDENCE ({contextual_implied_count}):
+{contextual_implied}
+
 SCORING DEFINITIONS:
 {scoring_text}
 
-EVIDENCE COLLECTION:
-{evidence_text}
-
-Your task is to provide a comprehensive analysis and synthesis of ALL the evidence above. 
-This summary will be used by an evaluator to assess the criterion, so it should be thorough and objective.
-
-Include in your analysis:
-1. A synthesis of what the evidence collectively indicates about this criterion
-2. The strength and quality of the evidence as a whole
-3. Key patterns or themes across all evidence items
-4. Any contradictions or tensions in the evidence
-5. What the evidence suggests about potential strengths and weaknesses
-6. Whether the evidence tends toward a particular rating based on the scoring definitions
-
-Keep your analysis factual and evidence-based. Do not make a final rating yourself, but organize the evidence 
-in a way that will help the evaluator make an informed assessment.
+Provide a comprehensive analysis that:
+1. Synthesizes what the evidence collectively indicates about this criterion
+2. Evaluates the strength and quality of evidence for making an assessment
+3. Identifies key patterns and themes across the evidence
+4. Notes any contradictions or tensions in the evidence
+5. Recommends whether a direct assessment is justified based on evidence (YES/NO/MAYBE)
+6. Suggests what rating range (if any) the evidence best supports
 
 Your comprehensive analysis:"""
         
-        # Get summary
-        summary, _ = await self._safe_llm_call(
-            "generate_completion",
-            prompt=prompt,
-            system_prompt="""You are an expert evidence analyst creating comprehensive evidence summaries.
-Your job is to synthesize all available evidence for a criterion into a clear, comprehensive analysis
-that will serve as the primary evidence packet for evaluation. Be thorough, balanced, and objective.""",
-            temperature=0.3,
-            max_tokens=1500
-        )
+        # Define schema for structured output
+        summary_schema = {
+            "type": "object",
+            "properties": {
+                "comprehensive_analysis": {"type": "string"},
+                "key_patterns": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "contradictions": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "direct_assessment_justified": {"type": "string", "enum": ["YES", "NO", "MAYBE"]},
+                "suggested_rating_range": {"type": "string"},
+                "confidence_level": {"type": "number"}
+            },
+            "required": ["comprehensive_analysis", "direct_assessment_justified"]
+        }
         
-        return summary
+        # Get summary using structured output call
+        system_prompt = """You are an expert evidence analyst creating comprehensive evidence summaries.
+Your job is to synthesize all available evidence for a criterion into a clear, balanced analysis
+that will help an evaluator determine if a direct rating is possible or if inference is needed.
+
+Be careful with your recommendation about direct assessment:
+- Use "YES" only when there is substantial direct evidence that clearly supports a specific rating
+- Use "MAYBE" when there is some evidence but it's mixed or not entirely conclusive
+- Use "NO" when there is insufficient evidence to make a direct assessment
+
+Be objective and evidence-based in your analysis."""
+        
+        # Optimize the prompt if it's very large
+        optimized_prompt = self.optimize_prompt(prompt, 6000)
+        
+        # Call LLM for the summary
+        try:
+            summary = await self._structured_output_call(
+                prompt=optimized_prompt,
+                output_schema=summary_schema,
+                system_prompt=system_prompt,
+                temperature=0.3
+            )
+            
+            return summary
+        except Exception as e:
+            self.logger.error(f"Error creating evidence summary: {str(e)}")
+            # Return minimal valid structure
+            return {
+                "comprehensive_analysis": "Error creating comprehensive analysis.",
+                "key_patterns": [],
+                "contradictions": [],
+                "direct_assessment_justified": "NO",
+                "suggested_rating_range": "",
+                "confidence_level": 0.0
+            }
+    
+    def _format_evidence_group(self, evidence_group: List[Dict[str, Any]]) -> str:
+        """
+        Format a group of evidence items for the summary prompt.
+        
+        Args:
+            evidence_group: List of evidence items in this group
+            
+        Returns:
+            Formatted evidence text
+        """
+        if not evidence_group:
+            return "None"
+        
+        formatted = ""
+        for i, evidence in enumerate(evidence_group):
+            text = evidence.get("text", "")
+            relevance_explanation = evidence.get("relevance_explanation", "")
+            confidence = evidence.get("confidence", 0.8)
+            sufficiency = evidence.get("sufficiency_indicator", "Moderate")
+            
+            formatted += f"Evidence {i+1}: {text}\n"
+            formatted += f"Relevance: {relevance_explanation}\n"
+            formatted += f"Confidence: {confidence}\n"
+            formatted += f"Sufficiency: {sufficiency}\n\n"
+        
+        return formatted
