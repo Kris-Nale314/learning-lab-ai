@@ -8,41 +8,77 @@ The Framework Assessment Workbench is an experimental laboratory for exploring h
 
 Unlike traditional document analysis tools, this workbench is designed to experiment with different assessment strategies and measure their effectiveness. It's a platform for exploring the question: "What's the most effective way to extract and evaluate structured insights from unstructured text?"
 
-## 💡 Core Beliefs
+<p align="center">
+  <img src="docs/images/screenLab1.png" alt="Learning Lab AI Interface" width="80%"/>
+</p>
 
-We believe that AI tools should enhance human decision-making, not replace it. The most powerful applications happen when users can precisely articulate what they're looking for and thoughtfully evaluate AI-generated insights.
+## 💡 Core Design Philosophy
 
-The true challenge isn't just building more powerful AI - it's designing systems that help users become more skilled "wishers" who can clearly define what they want and critically evaluate what they receive.
+This workbench embodies a specific philosophy about effective AI system design:
 
-### Decision Intelligence at the Core
+### 1. Decision Enhancement, Not Just Automation
 
-The Framework Assessment Workbench embodies the principles of decision intelligence:
+AI systems create sustainable value when they enhance human decision-making capabilities rather than simply automating existing processes. The workbench demonstrates this by:
 
-1. **Strategic Value Articulation**: Instead of implementing AI for its own sake, we focus on clearly articulating what value we want to extract from documents.
+- Focusing on augmenting analytical capabilities rather than replacing human judgment
+- Creating multi-resolution information layers that match how people actually make decisions
+- Preserving domain expertise by making assessment frameworks explicit and modifiable
 
-2. **Context-Aware Processing**: Our multi-agent architecture adapts to the specific context of each assessment rather than applying one-size-fits-all approaches.
+### 2. Design for Evolution, Not Static Deployment
 
-3. **Thoughtful Interaction**: The system encourages users to carefully define frameworks and critically evaluate results, avoiding the pitfall of uncritically trusting AI outputs.
+Effective AI systems must be designed from the start to evolve continuously as models, data, and requirements change:
 
-4. **Precision in Expression**: Our framework-building capabilities help users precisely communicate assessment criteria to AI systems.
+- The multi-agent architecture allows components to be independently upgraded
+- Processing strategies adapt dynamically to different document types and frameworks
+- The experimental interface encourages comparing different approaches to find optimal strategies
 
-## ⚙️ How It Works
+### 3. Collaborative Development Across Disciplines
 
-The workbench uses a flexible multi-agent architecture powered by LangChain with a novel approach:
+The workbench demonstrates how AI implementation requires bridging technical, business, and domain expertise:
 
-1. **Dynamic Assessment Planning**: Rather than using a fixed pipeline, each assessment begins with a Meta Planner that designs a custom processing strategy based on the document and framework
+- Framework definitions translate business objectives into technical assessment criteria
+- The assessment interface makes technical processes transparent to non-technical users
+- Results visualization focuses on business outcomes rather than technical metrics
 
-2. **Configurable Agent Deployment**: Agents are configured and deployed according to the strategy, with customized instructions for each assessment
+### 4. Business Outcomes, Not Technical Metrics
 
-3. **Experimental Measurement**: Token usage, processing time, and quality metrics are tracked to compare different assessment approaches
+The system begins with clearly defined business outcomes that drive technical decisions:
 
-4. **Interactive Exploration**: Users can review and modify assessment strategies, comparing different approaches to see what works best
+- Assessment metrics directly connect to business criteria rather than model performance
+- The interface emphasizes practical insights rather than technical sophistication
+- Confidence metrics and evidence tracing help users evaluate the reliability of results
 
 <p align="center">
   <img src="docs/images/logicLearningLabAI.png" alt="Learning Lab AI" width="80%"/>
 </p>
 
-## 🔬 Technical Approach
+## ⚙️ Technical Architecture: Multi-Resolution AI
+
+The workbench implements a "multi-resolution" approach to AI system design - matching different levels of AI complexity to specific tasks within the assessment pipeline:
+
+### Resolution Level 1: Document Processing
+
+Base-level statistical and rule-based techniques for document parsing, tokenization, and chunking that handle the fundamental document structure without requiring advanced models.
+
+### Resolution Level 2: Targeted Extraction
+
+Standard-resolution, task-specific information extraction that identifies relevant passages and extracts specific data points using focused models.
+
+### Resolution Level 3: Contextual Evaluation
+
+High-resolution models that understand context, perform nuanced evaluation against framework criteria, and generate human-readable assessments with proper reasoning.
+
+### Resolution Level 4: Strategic Orchestration
+
+Ultra-resolution meta-planning that determines the optimal assessment strategy based on document characteristics, framework complexity, and assessment goals.
+
+This multi-resolution approach allows the system to:
+- Allocate computational resources efficiently
+- Apply appropriate levels of AI sophistication to different subtasks
+- Balance performance against cost and latency requirements
+- Evolve component capabilities independently as technology advances
+
+## 🔬 Technical Implementation
 
 The system implements several key innovations:
 
@@ -86,59 +122,7 @@ export OPENAI_API_KEY=your_key_here
 streamlit run app.py
 ```
 
-## 📁 Project Structure
-
-```
-learning-lab-ai/
-├── app.py                     # Main Streamlit application
-├── requirements.txt           # Dependencies
-├── LICENSE                    # License file
-├── README.md                  # Project readme
-├── core/
-│   ├── context.py             # Assessment context with collaboration capabilities
-│   ├── execution.py           # Strategy execution engine
-│   ├── agents/                # Agent implementations
-│   │   ├── base.py            # Base agent class
-│   │   ├── meta_planner.py    # Strategy planning agent
-│   │   ├── extractor.py       # Configurable extraction agent  
-│   │   ├── evaluator.py       # Configurable evaluation agent
-│   │   └── reporter.py        # Configurable reporting agent
-│   ├── models/                # Data models
-│   │   ├── framework.py       # Framework model
-│   │   ├── document.py        # Document model
-│   │   ├── evidence.py        # Evidence model
-│   │   ├── assessment.py      # Assessment result model
-│   │   └── strategy.py        # Processing strategy model
-│   └── processors/            # Document processing
-│       ├── chunker.py         # Multiple chunking strategies
-│       ├── strategy_executor.py # Strategy execution engine
-│       └── token_optimizer.py # Token usage optimization
-├── data/                      # Data directory
-│   ├── samples/               # Sample documents
-│   ├── frameworks/            # Framework definitions
-│   ├── outputs/               # Saved assessment results
-│   └── context/               # Stored context objects
-├── utils/                     # Utility functions
-│   ├── document_utils.py      # Document handling utilities
-│   ├── visualization.py       # Visualization helpers
-│   ├── ui_components.py       # Streamlit UI components
-│   ├── ui_styles.py           # UI styling helpers
-│   ├── ui_results.py          # Results display utilities
-│   ├── ui_progress.py         # Progress tracking components
-│   └── path_utils.py          # File path management
-├── docs/                      # Documentation
-│   ├── images/                # Architecture diagrams, logos
-│   ├── concepts.md            # Concept explanations
-│   └── usage.md               # Usage documentation
-├── tests/                     # Test suite
-└── pages/                     # Streamlit pages
-    ├── 01_Assess_Framework.py   # Main assessment page
-    ├── 02_Framework_Builder.py  # Framework definition
-    ├── 03_Results_Explorer.py   # Results visualization
-    └── 04_Experiment_Lab.py     # Experimentation
-```
-
-## 🔬 What You Can Explore
+## 🔬 Experimentation Capabilities
 
 The workbench allows you to experiment with different approaches to framework assessment, focusing on the decision intelligence aspects of AI system design:
 
@@ -176,29 +160,29 @@ The workbench allows you to experiment with different approaches to framework as
 - **Research Quality Evaluation**: Assess papers against methodological standards
 - **Project Documentation Review**: Identify risks and gaps in project documentation
 
-## 🔑 Key Principles for AI System Design
+## 🔑 Guiding Principles for AI System Design
 
 The Framework Assessment Workbench embodies several key principles that can be applied to any AI system design:
 
-### 1. Know When to Use AI
+### 1. Match AI Resolution to Purpose
 
-Not every problem requires AI. The workbench helps users determine when traditional automation (via explicit rules) is sufficient and when AI approaches are needed for problems too complex to solve with conventional methods.
+Not every task requires the most sophisticated AI approach. The workbench demonstrates how different "resolutions" of AI capability can be combined effectively, using simpler techniques where appropriate and more advanced models where complexity demands it.
 
-### 2. Become a Skilled "Wisher"
+### 2. Balance Technical Sophistication with Practical Value
 
-The success of AI systems depends heavily on how well humans can articulate what they want. Our framework-building capabilities help users develop this skill by providing structure for expressing evaluation criteria.
+The workbench focuses on delivering practical insights rather than pursuing technical sophistication for its own sake, demonstrating that effective AI isn't about having the most advanced models but about creating systems that enhance real-world decision-making.
 
-### 3. Be an "Author of Meaning"
+### 3. Design for Continuous Evolution
 
-With generative AI systems capable of producing infinite possible outputs, the workbench helps users define what "good" looks like for their specific needs and develop metrics to evaluate success.
+The modular architecture and experimental approach reflect the understanding that AI systems must evolve continuously as technology, data, and requirements change, rather than being treated as static implementations.
 
-### 4. Inject Thoughtfulness
+### 4. Prioritize Decision Enhancement
 
-The system encourages critical evaluation of AI outputs by tracking confidence scores, providing evidence traceability, and visualizing assessment metrics, helping users avoid the trap of uncritical trust.
+By focusing on framework-guided assessment, the workbench demonstrates how AI can enhance human decision-making capabilities by providing structured insights that would be impractical to generate manually.
 
-### 5. Prioritize Value Over Technology
+### 5. Create Multi-Resolution Information Access
 
-The workbench focuses on the business value of insights rather than the technology itself, demonstrating how AI can be applied to previously "impossible" document analysis problems when value is clearly articulated.
+The assessment results provide information at multiple levels of detail—from summary ratings to detailed evidence—matching how people naturally process information when making decisions.
 
 ## 🤝 Contributing
 

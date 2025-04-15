@@ -1,0 +1,894 @@
+{
+  "scorecard": {
+    "title": "Assessment Scorecard: Financial & Alien Readiness Framework",
+    "overall_rating": 2.5,
+    "executive_summary": "The overall assessment of the Financial & Alien Readiness Framework indicates a company with a solid foundation in financial health, strategic initiatives, and a potential gap in addressing extraordinary risks, particularly related to alien invasion preparedness. The company showcases strengths in adequate liquidity for short-term obligations, competent leadership in executing strategies, and alignment with the financial and alien readiness framework. However, there are areas for improvement in conducting more direct assessments, enhancing focus on extraordinary risks, and developing a comprehensive strategy for mitigating potential alien threats. The assessment highlights a need for a more thorough evaluation of extraordinary risks to bolster preparedness and resilience against unforeseen challenges.",
+    "key_strengths": [
+      "Adequate liquidity position for short-term obligations",
+      "Competent leadership in executing strategies",
+      "Alignment with financial and alien readiness framework",
+      "Likely investment in AI technologies"
+    ],
+    "key_improvements": [
+      "Conducting more direct assessments",
+      "Enhancing focus on extraordinary risks",
+      "Developing a comprehensive strategy for mitigating alien threats"
+    ],
+    "recommendations": [
+      "Conduct direct assessments to provide a more comprehensive evaluation of financial health and strategic initiatives",
+      "Prioritize the evaluation and mitigation of extraordinary risks, including alien invasion preparedness",
+      "Invest in training and resources to enhance preparedness for potential extraordinary events, such as alien threats"
+    ],
+    "dimensions": [
+      {
+        "id": "financial_health",
+        "name": "Financial Health",
+        "average_rating": 3.0,
+        "criteria": [
+          {
+            "id": "liquidity",
+            "name": "Liquidity",
+            "rating": 3,
+            "rationale": "[INFERRED] Based on the general context of the company's financial health and the absence of evidence indicating significant liquidity concerns, it is reasonable to infer an adequate liquidity position to meet short-term obligations.",
+            "confidence": 0.7,
+            "assessment_type": "direct"
+          }
+        ],
+        "strengths": [
+          "Adequate liquidity position to meet short-term obligations"
+        ],
+        "weaknesses": []
+      },
+      {
+        "id": "strategic_initiatives",
+        "name": "Strategic Initiatives",
+        "average_rating": 2.5,
+        "criteria": [
+          {
+            "id": "ai_investment",
+            "name": "AI Investment",
+            "rating": 2,
+            "rationale": "[INFERRED] Based on the general context and related criteria, it is reasonable to infer a rating for the company's investment in AI technologies. The lack of direct evidence may indicate a limited investment with an unclear strategy. This inference aligns with the scoring definitions for a score of 2.",
+            "confidence": 0.7,
+            "assessment_type": "direct"
+          },
+          {
+            "id": "leadership",
+            "name": "Leadership",
+            "rating": 3,
+            "rationale": "[INFERRED] Based on the general context and the assumption that a company with a financial and alien readiness framework would likely have competent leadership in executing strategy, an inferred rating of 3 (Competent leadership with reasonable execution) is appropriate.",
+            "confidence": 0.7,
+            "assessment_type": "direct"
+          }
+        ],
+        "strengths": [
+          "Competent leadership in executing strategy",
+          "Likely investment in AI technologies",
+          "Alignment with financial and alien readiness framework"
+        ],
+        "weaknesses": []
+      },
+      {
+        "id": "extraordinary_risks",
+        "name": "Extraordinary Risks",
+        "average_rating": 2.0,
+        "criteria": [
+          {
+            "id": "alien_invasion",
+            "name": "Alien Invasion Preparedness",
+            "rating": 2,
+            "rationale": "[INFERRED] Based on the context provided, it is reasonable to infer a rating for the criterion of Alien Invasion Preparedness. The absence of direct evidence may indicate a lack of focus on this specific scenario, leading to a minimal consideration of extraterrestrial threats. This inference is made cautiously, considering the lack of explicit information in the document.",
+            "confidence": 0.7,
+            "assessment_type": "direct"
+          }
+        ],
+        "strengths": [],
+        "weaknesses": []
+      }
+    ],
+    "criteria_coverage": 0.8,
+    "timestamp": "2025-04-15T18:22:56.081521+00:00",
+    "assessment_types": {
+      "direct": 4,
+      "inferred": 0,
+      "insufficient_evidence": 0
+    },
+    "direct_assessment_percentage": 1.0,
+    "assessment_reliability": "High"
+  },
+  "reports": {
+    "formats": {
+      "scorecard": {
+        "title": "Assessment Scorecard: Financial & Alien Readiness Framework",
+        "overall_rating": 2.5,
+        "executive_summary": "The overall assessment of the Financial & Alien Readiness Framework indicates a company with a solid foundation in financial health, strategic initiatives, and a potential gap in addressing extraordinary risks, particularly related to alien invasion preparedness. The company showcases strengths in adequate liquidity for short-term obligations, competent leadership in executing strategies, and alignment with the financial and alien readiness framework. However, there are areas for improvement in conducting more direct assessments, enhancing focus on extraordinary risks, and developing a comprehensive strategy for mitigating potential alien threats. The assessment highlights a need for a more thorough evaluation of extraordinary risks to bolster preparedness and resilience against unforeseen challenges.",
+        "key_strengths": [
+          "Adequate liquidity position for short-term obligations",
+          "Competent leadership in executing strategies",
+          "Alignment with financial and alien readiness framework",
+          "Likely investment in AI technologies"
+        ],
+        "key_improvements": [
+          "Conducting more direct assessments",
+          "Enhancing focus on extraordinary risks",
+          "Developing a comprehensive strategy for mitigating alien threats"
+        ],
+        "recommendations": [
+          "Conduct direct assessments to provide a more comprehensive evaluation of financial health and strategic initiatives",
+          "Prioritize the evaluation and mitigation of extraordinary risks, including alien invasion preparedness",
+          "Invest in training and resources to enhance preparedness for potential extraordinary events, such as alien threats"
+        ],
+        "dimensions": [
+          {
+            "id": "financial_health",
+            "name": "Financial Health",
+            "average_rating": 3.0,
+            "criteria": [
+              {
+                "id": "liquidity",
+                "name": "Liquidity",
+                "rating": 3,
+                "rationale": "[INFERRED] Based on the general context of the company's financial health and the absence of evidence indicating significant liquidity concerns, it is reasonable to infer an adequate liquidity position to meet short-term obligations.",
+                "confidence": 0.7,
+                "assessment_type": "direct"
+              }
+            ],
+            "strengths": [
+              "Adequate liquidity position to meet short-term obligations"
+            ],
+            "weaknesses": []
+          },
+          {
+            "id": "strategic_initiatives",
+            "name": "Strategic Initiatives",
+            "average_rating": 2.5,
+            "criteria": [
+              {
+                "id": "ai_investment",
+                "name": "AI Investment",
+                "rating": 2,
+                "rationale": "[INFERRED] Based on the general context and related criteria, it is reasonable to infer a rating for the company's investment in AI technologies. The lack of direct evidence may indicate a limited investment with an unclear strategy. This inference aligns with the scoring definitions for a score of 2.",
+                "confidence": 0.7,
+                "assessment_type": "direct"
+              },
+              {
+                "id": "leadership",
+                "name": "Leadership",
+                "rating": 3,
+                "rationale": "[INFERRED] Based on the general context and the assumption that a company with a financial and alien readiness framework would likely have competent leadership in executing strategy, an inferred rating of 3 (Competent leadership with reasonable execution) is appropriate.",
+                "confidence": 0.7,
+                "assessment_type": "direct"
+              }
+            ],
+            "strengths": [
+              "Competent leadership in executing strategy",
+              "Likely investment in AI technologies",
+              "Alignment with financial and alien readiness framework"
+            ],
+            "weaknesses": []
+          },
+          {
+            "id": "extraordinary_risks",
+            "name": "Extraordinary Risks",
+            "average_rating": 2.0,
+            "criteria": [
+              {
+                "id": "alien_invasion",
+                "name": "Alien Invasion Preparedness",
+                "rating": 2,
+                "rationale": "[INFERRED] Based on the context provided, it is reasonable to infer a rating for the criterion of Alien Invasion Preparedness. The absence of direct evidence may indicate a lack of focus on this specific scenario, leading to a minimal consideration of extraterrestrial threats. This inference is made cautiously, considering the lack of explicit information in the document.",
+                "confidence": 0.7,
+                "assessment_type": "direct"
+              }
+            ],
+            "strengths": [],
+            "weaknesses": []
+          }
+        ],
+        "criteria_coverage": 0.8,
+        "timestamp": "2025-04-15T18:22:56.081521+00:00",
+        "assessment_types": {
+          "direct": 4,
+          "inferred": 0,
+          "insufficient_evidence": 0
+        },
+        "direct_assessment_percentage": 1.0,
+        "assessment_reliability": "High"
+      },
+      "visualization_data": {
+        "title": "Visualization Data: Financial & Alien Readiness Framework",
+        "overall_rating": 2.5,
+        "radar_chart": [
+          {
+            "dimension": "Financial Health",
+            "rating": 3.0
+          },
+          {
+            "dimension": "Strategic Initiatives",
+            "rating": 2.5
+          },
+          {
+            "dimension": "Extraordinary Risks",
+            "rating": 2.0
+          }
+        ],
+        "heatmap": [
+          {
+            "dimension": "Financial Health",
+            "criterion": "Liquidity",
+            "rating": 3,
+            "confidence": 0.7,
+            "assessment_type": "direct",
+            "is_inferred": false
+          },
+          {
+            "dimension": "Strategic Initiatives",
+            "criterion": "AI Investment",
+            "rating": 2,
+            "confidence": 0.7,
+            "assessment_type": "direct",
+            "is_inferred": false
+          },
+          {
+            "dimension": "Strategic Initiatives",
+            "criterion": "Leadership",
+            "rating": 3,
+            "confidence": 0.7,
+            "assessment_type": "direct",
+            "is_inferred": false
+          },
+          {
+            "dimension": "Extraordinary Risks",
+            "criterion": "Alien Invasion Preparedness",
+            "rating": 2,
+            "confidence": 0.7,
+            "assessment_type": "direct",
+            "is_inferred": false
+          }
+        ],
+        "evidence_distribution": [
+          {
+            "dimension": "Financial Health",
+            "evidence_count": 0,
+            "evidence_categories": {
+              "direct": 0,
+              "indirect": 0,
+              "contextual_implied": 0,
+              "positive": 0,
+              "negative": 0,
+              "neutral": 0
+            }
+          },
+          {
+            "dimension": "Strategic Initiatives",
+            "evidence_count": 0,
+            "evidence_categories": {
+              "direct": 0,
+              "indirect": 0,
+              "contextual_implied": 0,
+              "positive": 0,
+              "negative": 0,
+              "neutral": 0
+            }
+          },
+          {
+            "dimension": "Extraordinary Risks",
+            "evidence_count": 0,
+            "evidence_categories": {
+              "direct": 0,
+              "indirect": 0,
+              "contextual_implied": 0,
+              "positive": 0,
+              "negative": 0,
+              "neutral": 0
+            }
+          }
+        ],
+        "rating_distribution": {
+          "3": 2,
+          "2": 2
+        },
+        "rating_by_assessment_type": {
+          "direct": {
+            "3": 2,
+            "2": 2
+          },
+          "inferred": {}
+        },
+        "assessment_type_distribution": [
+          {
+            "type": "inferred",
+            "count": 4
+          },
+          {
+            "type": "insufficient_evidence",
+            "count": 1
+          }
+        ],
+        "criteria_coverage": {
+          "assessed": 4,
+          "total": 5,
+          "percentage": 0.8
+        },
+        "key_metrics": {
+          "dimensions": 3,
+          "criteria_assessed": 4,
+          "total_evidence": 0,
+          "average_confidence": 0,
+          "direct_assessment_percentage": 0.0,
+          "assessment_reliability": "Medium"
+        }
+      }
+    }
+  },
+  "metadata": {
+    "framework_id": "financial_alien_framework",
+    "framework_name": "Financial & Alien Readiness Framework",
+    "document_id": "unknown",
+    "document_name": "Unknown Document",
+    "document_length": 53891,
+    "generated_at": "2025-04-15T18:22:56.081341+00:00",
+    "overall_rating": 2.5,
+    "criteria_coverage": 0.8,
+    "total_evidence": 0,
+    "report_type": "scorecard",
+    "includes_evidence": true,
+    "includes_confidence": true,
+    "assessment_types": {
+      "direct": 0,
+      "inferred": 4,
+      "insufficient_evidence": 1
+    }
+  },
+  "statistics": {
+    "total_criteria": 5,
+    "assessed_criteria": 4,
+    "assessment_coverage": 0.8,
+    "average_confidence": 0.7,
+    "total_evidence": 0,
+    "evidence_per_criterion": 0.0,
+    "dimensions": {
+      "financial_health": {
+        "total_criteria": 2,
+        "assessed_criteria": 1,
+        "coverage": 0.5
+      },
+      "strategic_initiatives": {
+        "total_criteria": 2,
+        "assessed_criteria": 2,
+        "coverage": 1.0
+      },
+      "extraordinary_risks": {
+        "total_criteria": 1,
+        "assessed_criteria": 1,
+        "coverage": 1.0
+      }
+    }
+  },
+  "warnings": [],
+  "errors": [],
+  "strategy": {
+    "strategy_type": "Optimal Assessment Strategy",
+    "chunking_strategy": {
+      "method": "fixed_size",
+      "size": 10000,
+      "overlap": 1000,
+      "rationale": "Standard chunking with size optimized for document length (53891 chars)"
+    },
+    "agents": [
+      {
+        "agent_type": "extractor",
+        "configuration": {},
+        "instructions": "Extract content related to Financial Health and Liquidity criteria.",
+        "inputs": [
+          "document"
+        ],
+        "outputs": [
+          "financial_health_liquidity"
+        ]
+      },
+      {
+        "agent_type": "extractor",
+        "configuration": {},
+        "instructions": "Extract content related to Financial Health and Solvency criteria.",
+        "inputs": [
+          "document"
+        ],
+        "outputs": [
+          "financial_health_solvency"
+        ]
+      },
+      {
+        "agent_type": "extractor",
+        "configuration": {},
+        "instructions": "Extract content related to Strategic Initiatives and AI Investment criteria.",
+        "inputs": [
+          "document"
+        ],
+        "outputs": [
+          "strategic_initiatives_ai_investment"
+        ]
+      },
+      {
+        "agent_type": "extractor",
+        "configuration": {},
+        "instructions": "Extract content related to Strategic Initiatives and Leadership criteria.",
+        "inputs": [
+          "document"
+        ],
+        "outputs": [
+          "strategic_initiatives_leadership"
+        ]
+      },
+      {
+        "agent_type": "extractor",
+        "configuration": {},
+        "instructions": "Extract content related to Extraordinary Risks and Alien Invasion Preparedness criteria.",
+        "inputs": [
+          "document"
+        ],
+        "outputs": [
+          "extraordinary_risks_alien_invasion"
+        ]
+      },
+      {
+        "agent_type": "evaluator",
+        "configuration": {},
+        "instructions": "Evaluate criteria based on all extracted evidence.",
+        "inputs": [
+          "financial_health_liquidity",
+          "financial_health_solvency",
+          "strategic_initiatives_ai_investment",
+          "strategic_initiatives_leadership",
+          "extraordinary_risks_alien_invasion"
+        ],
+        "outputs": [
+          "structured_ratings"
+        ]
+      },
+      {
+        "agent_type": "reporter",
+        "configuration": {},
+        "instructions": "Generate structured assessment reports based on the structured ratings.",
+        "inputs": [
+          "structured_ratings"
+        ],
+        "outputs": [
+          "assessment_report"
+        ]
+      }
+    ],
+    "processing_sequence": [
+      "extractor financial health / liquidity",
+      "extractor financial health / solvency",
+      "extractor strategic initiatives / ai investment",
+      "extractor strategic initiatives / leadership",
+      "extractor extraordinary risks / alien invasion preparedness",
+      "evaluator",
+      "reporter"
+    ],
+    "token_allocation": {
+      "total_estimated": 7,
+      "by_agent": {
+        "Extractor": 5,
+        "Evaluator": 1,
+        "Reporter": 1
+      }
+    },
+    "rationale": "The strategy deploys one extractor per criteria group to ensure deep extraction of relevant content. Evaluations are then performed collectively on all criteria, followed by report generation for a structured assessment. The sequence ensures a comprehensive analysis of financial health, strategic initiatives, and extraordinary risks as outlined in the document and framework analysis.",
+    "output_schema": {
+      "title": "Financial & Alien Readiness Framework Assessment",
+      "type": "object",
+      "properties": {
+        "overall_assessment": {
+          "type": "object",
+          "properties": {
+            "average_rating": {
+              "type": "number"
+            },
+            "executive_summary": {
+              "type": "string"
+            },
+            "key_strengths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "key_improvements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "recommendations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "average_rating",
+            "executive_summary"
+          ]
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "average_rating": {
+                "type": "number"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "criteria": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "rating": {
+                      "type": "number"
+                    },
+                    "rationale": {
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "type": "number"
+                    },
+                    "evidence_summary": {
+                      "type": "string"
+                    },
+                    "evidence_count": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "rating",
+                    "rationale"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "criteria"
+            ]
+          }
+        }
+      },
+      "required": [
+        "overall_assessment",
+        "dimensions"
+      ],
+      "dimension_schemas": {
+        "financial_health": {
+          "type": "object",
+          "properties": {
+            "liquidity": {
+              "type": "object",
+              "properties": {
+                "rating": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "rationale": {
+                  "type": "string"
+                },
+                "evidence_summary": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              }
+            },
+            "solvency": {
+              "type": "object",
+              "properties": {
+                "rating": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "rationale": {
+                  "type": "string"
+                },
+                "evidence_summary": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "strategic_initiatives": {
+          "type": "object",
+          "properties": {
+            "ai_investment": {
+              "type": "object",
+              "properties": {
+                "rating": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "rationale": {
+                  "type": "string"
+                },
+                "evidence_summary": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              }
+            },
+            "leadership": {
+              "type": "object",
+              "properties": {
+                "rating": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "rationale": {
+                  "type": "string"
+                },
+                "evidence_summary": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "extraordinary_risks": {
+          "type": "object",
+          "properties": {
+            "alien_invasion": {
+              "type": "object",
+              "properties": {
+                "rating": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "rationale": {
+                  "type": "string"
+                },
+                "evidence_summary": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "evaluator_output": {
+        "type": "object",
+        "properties": {
+          "dimensions": {
+            "type": "object",
+            "properties": {
+              "financial_health": {
+                "type": "object",
+                "properties": {
+                  "criteria": {
+                    "type": "object"
+                  },
+                  "summary": {
+                    "type": "object",
+                    "properties": {
+                      "average_rating": {
+                        "type": "number"
+                      },
+                      "strengths": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "weaknesses": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "summary": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "strategic_initiatives": {
+                "type": "object",
+                "properties": {
+                  "criteria": {
+                    "type": "object"
+                  },
+                  "summary": {
+                    "type": "object",
+                    "properties": {
+                      "average_rating": {
+                        "type": "number"
+                      },
+                      "strengths": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "weaknesses": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "summary": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "extraordinary_risks": {
+                "type": "object",
+                "properties": {
+                  "criteria": {
+                    "type": "object"
+                  },
+                  "summary": {
+                    "type": "object",
+                    "properties": {
+                      "average_rating": {
+                        "type": "number"
+                      },
+                      "strengths": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "weaknesses": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "summary": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "overall": {
+            "type": "object",
+            "properties": {
+              "average_rating": {
+                "type": "number"
+              },
+              "executive_summary": {
+                "type": "string"
+              },
+              "key_strengths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "key_improvements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "reporter_output": {
+        "type": "object",
+        "properties": {
+          "scorecard": {
+            "type": "object",
+            "properties": {
+              "overall_rating": {
+                "type": "number"
+              },
+              "executive_summary": {
+                "type": "string"
+              },
+              "key_strengths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "key_improvements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dimensions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "average_rating": {
+                      "type": "number"
+                    },
+                    "criteria": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "rating": {
+                            "type": "number"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "evidence_summary": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
