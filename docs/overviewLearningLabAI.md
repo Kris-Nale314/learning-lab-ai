@@ -19,7 +19,7 @@ The Framework Assessment Workbench tackles these challenges by reimagining how A
 The core innovation is our **Strategy-Driven Multi-Agent Architecture**. Unlike fixed pipelines that apply the same approach to every document, our system dynamically designs the assessment strategy based on document characteristics and framework needs.
 
 <p align="center">
-  <img src="docs/images/logicLearningLabAI.svg" alt="Learning Lab AI" width="80%"/>
+  <img src="images/logicLearningLabAI.png" alt="Learning Lab AI" width="80%"/>
 </p>
 
 
