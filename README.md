@@ -9,7 +9,7 @@ The Framework Assessment Workbench is an experimental laboratory for exploring h
 Unlike traditional document analysis tools, this workbench is designed to experiment with different assessment strategies and measure their effectiveness. It's a platform for exploring the question: "What's the most effective way to extract and evaluate structured insights from unstructured text?"
 
 <p align="center">
-  <img src="docs/images/screenLab1.png" alt="Learning Lab AI Interface" width="80%"/>
+  <img src="docs/images/screenLab1.png" alt="Learning Lab AI Interface" width="70%"/>
 </p>
 
 ## 💡 Core Design Philosophy
@@ -49,40 +49,14 @@ The system begins with clearly defined business outcomes that drive technical de
 - Confidence metrics and evidence tracing help users evaluate the reliability of results
 
 <p align="center">
-  <img src="docs/images/logicLearningLabAI.png" alt="Learning Lab AI" width="80%"/>
+  <img src="docs/images/logicLearningLabAI.png" alt="Learning Lab AI" width="90%"/>
 </p>
-
-## ⚙️ Technical Architecture: Multi-Resolution AI
-
-The workbench implements a "multi-resolution" approach to AI system design - matching different levels of AI complexity to specific tasks within the assessment pipeline:
-
-### Resolution Level 1: Document Processing
-
-Base-level statistical and rule-based techniques for document parsing, tokenization, and chunking that handle the fundamental document structure without requiring advanced models.
-
-### Resolution Level 2: Targeted Extraction
-
-Standard-resolution, task-specific information extraction that identifies relevant passages and extracts specific data points using focused models.
-
-### Resolution Level 3: Contextual Evaluation
-
-High-resolution models that understand context, perform nuanced evaluation against framework criteria, and generate human-readable assessments with proper reasoning.
-
-### Resolution Level 4: Strategic Orchestration
-
-Ultra-resolution meta-planning that determines the optimal assessment strategy based on document characteristics, framework complexity, and assessment goals.
-
-This multi-resolution approach allows the system to:
-- Allocate computational resources efficiently
-- Apply appropriate levels of AI sophistication to different subtasks
-- Balance performance against cost and latency requirements
-- Evolve component capabilities independently as technology advances
 
 ## 🔬 Technical Implementation
 
-The system implements several key innovations:
+The system implements several key innovations in how AI components work together:
 
-### Strategy-Driven Processing
+### 🧩 Strategy-Driven Processing
 
 Instead of a fixed pipeline, each assessment has a custom strategy that defines:
 - Chunking approach (size, overlap, method)
@@ -90,15 +64,21 @@ Instead of a fixed pipeline, each assessment has a custom strategy that defines:
 - Evaluation criteria and methods
 - Sequencing and dependencies between steps
 
-### Configurable Agent Framework
+### 🤖 Multi-Resolution Agent Framework
 
-The system uses configurable agents that adapt to different tasks:
-- **Meta Planner**: Designs assessment strategies based on document and framework
-- **Extractor**: Configurable information extraction with different techniques
-- **Evaluator**: Flexible evaluation of criteria with configurable methods
-- **Reporter**: Customizable report generation in different formats
+The system matches different levels of AI sophistication to specific tasks:
 
-### Shared Context Architecture
+- **🧠 Meta Planner**: High-sophistication orchestration that determines the overall assessment strategy based on document characteristics and framework complexity
+  
+- **🔍 Extractor**: Task-specific information extraction that identifies relevant passages using focused models
+  
+- **⚖️ Evaluator**: Contextual understanding that performs nuanced evaluation against framework criteria
+  
+- **📊 Reporter**: Customizable report generation that translates technical findings into business insights
+
+This "right-sizing" approach applies appropriate AI capabilities to each subtask, balancing performance, efficiency, and adaptability.
+
+### 🌐 Shared Model Context Architecture
 
 All agents collaborate through a shared context that enables:
 - Evidence traceability from conclusions back to source text
@@ -164,23 +144,23 @@ The workbench allows you to experiment with different approaches to framework as
 
 The Framework Assessment Workbench embodies several key principles that can be applied to any AI system design:
 
-### 1. Match AI Resolution to Purpose
+### 1. 🎯 Match Capability to Purpose 
 
-Not every task requires the most sophisticated AI approach. The workbench demonstrates how different "resolutions" of AI capability can be combined effectively, using simpler techniques where appropriate and more advanced models where complexity demands it.
+Not every task requires the most sophisticated AI approach. The workbench demonstrates how different AI capabilities can be combined effectively, using simpler techniques where appropriate and more advanced models where complexity demands it.
 
-### 2. Balance Technical Sophistication with Practical Value
+### 2. ⚖️ Value Over Technology
 
-The workbench focuses on delivering practical insights rather than pursuing technical sophistication for its own sake, demonstrating that effective AI isn't about having the most advanced models but about creating systems that enhance real-world decision-making.
+The workbench focuses on delivering practical insights rather than pursuing technology for its own sake, demonstrating that effective AI isn't about having the most advanced models but about enhancing real-world decision-making.
 
-### 3. Design for Continuous Evolution
+### 3. 🌱 Design for Growth
 
-The modular architecture and experimental approach reflect the understanding that AI systems must evolve continuously as technology, data, and requirements change, rather than being treated as static implementations.
+The modular architecture reflects the understanding that AI systems must evolve continuously as technology and requirements change, rather than being treated as static implementations.
 
-### 4. Prioritize Decision Enhancement
+### 4. 🧠 Enhance Decision-Making
 
-By focusing on framework-guided assessment, the workbench demonstrates how AI can enhance human decision-making capabilities by providing structured insights that would be impractical to generate manually.
+By focusing on framework-guided assessment, the workbench demonstrates how AI can enhance human decision-making by providing structured insights that would be impractical to generate manually.
 
-### 5. Create Multi-Resolution Information Access
+### 5. 🔍 Right-Size Information Access
 
 The assessment results provide information at multiple levels of detail—from summary ratings to detailed evidence—matching how people naturally process information when making decisions.
 
