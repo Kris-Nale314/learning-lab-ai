@@ -4,86 +4,153 @@
 
 ## 🔍 What is this?
 
-The Framework Assessment Workbench is an experimental laboratory for exploring how AI can transform unstructured documents into structured insights. It demonstrates advanced document intelligence techniques focused on **framework-guided assessment** - evaluating content against structured criteria you define.
-
-Unlike traditional document analysis tools, this workbench is designed to experiment with different assessment strategies and measure their effectiveness. It's a platform for exploring the question: "What's the most effective way to extract and evaluate structured insights from unstructured text?"
+The Framework Assessment Workbench is an experimental laboratory for transforming unstructured documents into structured insights using advanced document intelligence techniques. It evaluates content against structured criteria you define, going beyond simple keyword search to provide comprehensive framework-guided assessment.
 
 <p align="center">
-  <img src="docs/images/screenLab1.png" alt="Learning Lab AI Interface" width="70%"/>
+  <img src="docs/images/screenLab1.png" alt="Learning Lab AI Interface" width="80%"/>
 </p>
 
-## 💡 Core Design Philosophy
+## 💡 Strategic Design Philosophy
 
-This workbench embodies a specific philosophy about effective AI system design:
+This project demonstrates how effective AI systems should be built to deliver sustainable value:
 
-### 1. Decision Enhancement, Not Just Automation
+### 🎯 Decision Enhancement, Not Just Automation
+AI systems create the most value when enhancing human decision-making rather than simply automating processes. This workbench:
+- Augments analytical capabilities while preserving human judgment
+- Creates multi-resolution information layers matching how people make decisions
+- Makes assessment frameworks explicit and modifiable to preserve domain expertise
 
-AI systems create sustainable value when they enhance human decision-making capabilities rather than simply automating existing processes. The workbench demonstrates this by:
+### 🌱 Design for Evolution, Not Static Deployment
+Effective AI systems must evolve continuously as technology and requirements change:
+- Components can be independently upgraded through modular architecture 
+- Processing strategies adapt dynamically to different document types
+- Experimentation interface allows comparing approaches to optimize results
 
-- Focusing on augmenting analytical capabilities rather than replacing human judgment
-- Creating multi-resolution information layers that match how people actually make decisions
-- Preserving domain expertise by making assessment frameworks explicit and modifiable
-
-### 2. Design for Evolution, Not Static Deployment
-
-Effective AI systems must be designed from the start to evolve continuously as models, data, and requirements change:
-
-- The multi-agent architecture allows components to be independently upgraded
-- Processing strategies adapt dynamically to different document types and frameworks
-- The experimental interface encourages comparing different approaches to find optimal strategies
-
-### 3. Collaborative Development Across Disciplines
-
-The workbench demonstrates how AI implementation requires bridging technical, business, and domain expertise:
-
-- Framework definitions translate business objectives into technical assessment criteria
-- The assessment interface makes technical processes transparent to non-technical users
-- Results visualization focuses on business outcomes rather than technical metrics
-
-### 4. Business Outcomes, Not Technical Metrics
-
-The system begins with clearly defined business outcomes that drive technical decisions:
-
-- Assessment metrics directly connect to business criteria rather than model performance
-- The interface emphasizes practical insights rather than technical sophistication
-- Confidence metrics and evidence tracing help users evaluate the reliability of results
+## 🏗️ Technical Architecture: Strategic Multi-Agent Orchestration
 
 <p align="center">
-  <img src="docs/images/logicLearningLabAI.png" alt="Learning Lab AI" width="90%"/>
+  <img src="docs/images/logicLearningLabAI.png" alt="Learning Lab AI Architecture" width="80%"/>
 </p>
 
-## 🔬 Technical Implementation
+### Key Components
 
-The system implements several key innovations in how AI components work together:
+#### 🤖 Meta Planner Agent
+- Analyzes document structure, content, and framework complexity
+- Designs custom processing strategy including:
+  - Optimal chunking method (fixed, semantic, paragraph-based)
+  - Extractor configuration and specialization
+  - Evidence categorization criteria
+  - Processing sequence and dependencies
 
-### 🧩 Strategy-Driven Processing
-
-Instead of a fixed pipeline, each assessment has a custom strategy that defines:
-- Chunking approach (size, overlap, method)
-- Extraction targets and techniques
-- Evaluation criteria and methods
-- Sequencing and dependencies between steps
-
-### 🤖 Multi-Resolution Agent Framework
-
-The system matches different levels of AI sophistication to specific tasks:
-
-- **🧠 Meta Planner**: High-sophistication orchestration that determines the overall assessment strategy based on document characteristics and framework complexity
-  
-- **🔍 Extractor**: Task-specific information extraction that identifies relevant passages using focused models
-  
-- **⚖️ Evaluator**: Contextual understanding that performs nuanced evaluation against framework criteria
-  
-- **📊 Reporter**: Customizable report generation that translates technical findings into business insights
-
-This "right-sizing" approach applies appropriate AI capabilities to each subtask, balancing performance, efficiency, and adaptability.
-
-### 🌐 Shared Model Context Architecture
-
-All agents collaborate through a shared context that enables:
-- Evidence traceability from conclusions back to source text
+#### 🧠 Shared Context Protocol
+- Central collaboration mechanism for all agents
+- Evidence traceability from conclusions back to source
 - Token usage optimization across processing steps
 - Transparent agent collaboration and decision records
+
+#### 🔍 Specialized Extractors
+- Configurable extraction techniques (direct, semantic, inference-based)
+- Evidence categorization with relevance and sentiment analysis
+- Confidence scoring for extracted evidence
+- Parallel processing with specialized focus areas
+
+#### ⚖️ Enhanced Evaluator
+- Direct vs. inferred assessment distinction
+- Evidence-based confidence calibration
+- Rating justification with traceability
+- Dimension and cross-criteria insights
+
+## 🛠️ Technical Innovations
+
+### Evidence Categorization Matrix
+
+The system implements sophisticated evidence categorization beyond binary relevance:
+
+| Relevance Level | Description | Assessment Impact |
+|-----------------|-------------|-------------------|
+| **Direct** | Explicitly addresses the criterion | Strongest weight in assessment |
+| **Indirect** | Implicitly relates to the criterion | Moderate weight in assessment |
+| **Contextual** | Provides important context | Supplementary information |
+| **Implied** | Suggests without stating | Weak inference support |
+
+Combined with sentiment analysis, this creates rich evidence classification for confident assessments.
+
+### Dynamic Chunking Strategy
+
+Different documents require different chunking approaches:
+
+```python
+def _design_chunking_strategy(self, document_size: int, document_analysis: Dict[str, Any]) -> Dict[str, Any]:
+    """Design optimal chunking strategy based on document characteristics."""
+    # Default configuration
+    strategy = {
+        "method": "fixed_size",
+        "size": 8000,
+        "overlap": 200,
+        "rationale": "Standard fixed-size chunking for general documents"
+    }
+    
+    # Adjust based on document size
+    if document_size < 15000:
+        # Small document - use a single large chunk
+        strategy["method"] = "fixed_size"
+        strategy["size"] = document_size
+        strategy["overlap"] = 0
+        strategy["rationale"] = "Document is small enough to process as a single chunk"
+    elif document_size > 100000:
+        # Very large document - use semantic chunking
+        strategy["method"] = "semantic"
+        strategy["rationale"] = "Large document requires semantic chunking to maintain context"
+    else:
+        # Check document structure
+        structure = document_analysis.get("content_structure", "").lower()
+        
+        if "dialogue" in structure or "transcript" in structure:
+            # Dialogue or transcript - use paragraph-based chunking
+            strategy["method"] = "paragraph"
+            strategy["rationale"] = "Dialogue structure benefits from paragraph-based chunking"
+            
+    return strategy
+```
+
+### Direct vs. Inferred Assessment Protocol
+
+One of the most significant innovations is explicit handling of assessment types:
+
+```python
+async def _evaluate_criterion(self, dimension_id: str, criterion: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Evaluate a criterion with clear distinction between direct and inferred assessments."""
+    # Get consolidated evidence
+    consolidated_evidence = self._get_consolidated_evidence(dimension_id, criterion_id)
+    
+    # Check if direct assessment is justified
+    if consolidated_evidence and consolidated_evidence.get("direct_assessment_justified") == "YES":
+        # Create direct assessment
+        assessment = await self._create_evidence_based_assessment(
+            dimension_id, criterion, consolidated_evidence
+        )
+        assessment["assessment_type"] = "direct"
+        
+    # If inference is allowed but direct not justified
+    elif self.infer_missing:
+        # Create inferred assessment
+        assessment = await self._create_inferred_assessment(
+            dimension_id, criterion, consolidated_evidence
+        )
+        if assessment:
+            assessment["assessment_type"] = "inferred"
+            
+    # No assessment possible
+    else:
+        assessment = {
+            "assessment_type": "insufficient_evidence",
+            "rating": None
+        }
+        
+    return assessment
+```
+
+This distinction is critical for transparency about assessment reliability.
 
 ## 🚀 Getting Started
 
@@ -104,78 +171,46 @@ streamlit run app.py
 
 ## 🔬 Experimentation Capabilities
 
-The workbench allows you to experiment with different approaches to framework assessment, focusing on the decision intelligence aspects of AI system design:
+The workbench allows you to experiment with different approaches:
 
-### From Buzzwords to Business Strategy
+- **Extraction Strategies**: Compare direct vs. semantic extraction techniques
+- **Chunking Approaches**: Test impact of chunk size and overlap on assessment quality
+- **Evaluation Methods**: Compare direct vs. inference-based assessment
+- **Token Optimization**: Explore efficiency tradeoffs in processing strategies
 
-- Define frameworks that translate business goals into measurable criteria
-- Experiment with different ways to articulate assessment criteria for AI
-- Test how variations in framework structure impact assessment quality
+## 💼 Real-World Applications
 
-### Extraction Strategies
-- Compare direct vs. semantic extraction techniques
-- Test targeted extraction for specific criteria
-- Evaluate the impact of different extraction prompts
+### Organizational Assessment
+- Evaluate documents against maturity models or compliance frameworks
+- Identify gaps and strengths in organizational documentation
+- Automate consistency checks in complex regulations
 
-### Chunking Approaches
-- Test the impact of chunk size and overlap on assessment quality
-- Compare fixed-size vs. semantic chunking
-- Explore specialized chunking for different content types
+### Meeting Analysis
+- Analyze transcripts against agenda frameworks
+- Verify that all required topics were addressed
+- Identify missing discussion points for follow-up
 
-### Evaluation Methods
-- Compare direct evaluation vs. inference-based assessment
-- Test different confidence calibration approaches
-- Measure the impact of evidence thresholds on ratings
+### Content Evaluation
+- Evaluate research papers against methodological standards
+- Check educational content against curriculum requirements
+- Validate marketing materials against brand guidelines
 
-### Token Optimization
-- Explore efficiency tradeoffs in different processing strategies
-- Compare batch processing vs. comprehensive analysis
-- Measure the relationship between token usage and assessment quality
+## 🧪 Why I Build Experimental AI Systems
 
-## 💼 Sample Use Cases
+Building systems like this workbench provides insights that can't be gained from theory alone:
 
-- **Organizational Readiness Assessment**: Evaluate documents against maturity frameworks
-- **Meeting Analysis**: Assess if specific topics were adequately addressed
-- **Policy Compliance**: Check documents against regulatory requirements
-- **Research Quality Evaluation**: Assess papers against methodological standards
-- **Project Documentation Review**: Identify risks and gaps in project documentation
+1. **Emergent Challenges**: Complex issues only become visible during implementation
+2. **Architecture Testing**: Understanding real-world performance of different patterns
+3. **Integration Learning**: Discovering how components interact in unexpected ways
+4. **Practical Limits**: Finding boundaries of what current LLM technology can achieve
+5. **User Experience**: Learning how humans interact with AI-generated assessments
 
-## 🔑 Guiding Principles for AI System Design
-
-The Framework Assessment Workbench embodies several key principles that can be applied to any AI system design:
-
-### 1. 🎯 Match Capability to Purpose 
-
-Not every task requires the most sophisticated AI approach. The workbench demonstrates how different AI capabilities can be combined effectively, using simpler techniques where appropriate and more advanced models where complexity demands it.
-
-### 2. ⚖️ Value Over Technology
-
-The workbench focuses on delivering practical insights rather than pursuing technology for its own sake, demonstrating that effective AI isn't about having the most advanced models but about enhancing real-world decision-making.
-
-### 3. 🌱 Design for Growth
-
-The modular architecture reflects the understanding that AI systems must evolve continuously as technology and requirements change, rather than being treated as static implementations.
-
-### 4. 🧠 Enhance Decision-Making
-
-By focusing on framework-guided assessment, the workbench demonstrates how AI can enhance human decision-making by providing structured insights that would be impractical to generate manually.
-
-### 5. 🔍 Right-Size Information Access
-
-The assessment results provide information at multiple levels of detail—from summary ratings to detailed evidence—matching how people naturally process information when making decisions.
-
-## 🤝 Contributing
-
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+> "The difference between theory and practice is greater in practice than in theory."
 
 ## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🔗 Acknowledgements
-
-This project draws inspiration from the field of Decision Intelligence and the idea that AI systems should enhance human decision-making rather than replace it. The approach emphasizes precision in articulating assessment criteria and thoughtfulness in evaluating AI-generated insights.
-
 ---
 
-*The Framework Assessment Workbench is an educational tool designed to explore advanced document intelligence techniques and foster thoughtful interaction with AI systems.*
+*The Framework Assessment Workbench is an experimental tool designed to explore advanced document intelligence techniques and demonstrate strategic AI system design principles.*
