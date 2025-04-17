@@ -1,8 +1,8 @@
 """
 Framework Assessment Workbench - Main Application
 
-This is the main entry point for the Framework Assessment Workbench application.
-It sets up the environment and initializes the Streamlit application with enhanced UI components.
+A professional tool for transforming unstructured documents into structured insights
+through AI-powered framework assessment.
 """
 
 import os
@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 
 # Set page config first (must be the first Streamlit command)
 st.set_page_config(
-    page_title="Framework Assessment Workbench",
-    page_icon="🧠",
+    page_title="Document Insight Pro",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -47,9 +47,9 @@ def setup_logging():
     )
     
     # Set specific loggers to different levels if needed
-    logging.getLogger("learning-lab-ai").setLevel(logging.DEBUG)
+    logging.getLogger("document-insight").setLevel(logging.DEBUG)
     
-    logger = logging.getLogger("learning-lab-ai.app")
+    logger = logging.getLogger("document-insight.app")
     logger.info(f"Logging initialized. Log file: {log_file}")
     
     return logger
@@ -73,7 +73,7 @@ def load_environment():
     st.session_state.api_key = api_key
     
     # Get optional environment variables
-    model = os.getenv("MODEL", "gpt-3.5-turbo")
+    model = os.getenv("MODEL", "gpt-3.5-turbo")  # Default to 3.5 as requested
     token_budget = int(os.getenv("TOKEN_BUDGET", "50000"))
     
     # Store in session state
@@ -96,13 +96,14 @@ def init_app():
         st.session_state.framework = None
         st.session_state.strategy = None
         st.session_state.assessment_results = None
+        st.session_state.theme = "dark"  # Default to dark theme
     
     # Initialize sidebar
     with st.sidebar:
-        st.title("🧠 Learning Lab AI")
+        st.title("📊 Multi-Agent Document Assessment Framwork")
         
         # Only show model selector if environment variables loaded successfully
-        if hasattr(st.session_state, "model"):
+        if hasattr(st.session_state, "api_key") and st.session_state.api_key:
             # Model selection (with environment default)
             model_options = ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"]
             default_index = 0
@@ -110,7 +111,7 @@ def init_app():
                 default_index = model_options.index(st.session_state.model)
             
             selected_model = st.selectbox(
-                "Model", 
+                "AI Model", 
                 model_options, 
                 index=default_index, 
                 key="model_selection"
@@ -121,8 +122,8 @@ def init_app():
                 st.session_state.model = selected_model
                 logger.info(f"Model changed to: {selected_model}")
         
-        # Add configuration options
-        st.sidebar.markdown("## Configuration")
+        # Add configuration header with some space
+        st.sidebar.markdown("## Settings")
         
         # Token budget slider (with environment default)
         if hasattr(st.session_state, "token_budget"):
@@ -143,80 +144,116 @@ def init_app():
         
         # Add version info
         st.sidebar.markdown("---")
-        st.sidebar.caption("Framework Assessment Workbench")
-        st.sidebar.caption("Version 0.2.0")
+        st.sidebar.caption("Multi-Agent Document Assessment Framwork")
+        st.sidebar.caption("Version 1.1.0")
+        st.sidebar.caption("© 2025 Naleszkiewicz")
 
 # Display homepage content
 def display_homepage():
     """Display the main homepage content."""
-    st.title("🧠 Learning Lab AI: Framework Assessment Workbench")
+    # Create a header with logo and title
     st.markdown(
         """
-        > "AI is a tool for decision-making. It's also a product of decisions."
+        <div style="display: flex; align-items: center; margin-bottom: 25px;">
+            <div style="font-size: 3.5rem; margin-right: 20px;">📊</div>
+            <div>
+                <div style="font-size: 2.5rem; font-weight: 600;">Multi-Agent Document Assessment Framwork</div>
+                <div style="color: #A0A0A0; font-size: 1.2rem;">Transform Documents into Structured Insights</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Primary value proposition
+    st.markdown(
+        """
+        ## Enterprise Document Analysis
         
-        ## 🔍 What is this?
+        Multi-Agent Document Assessment Framwork helps you extract structured insights from unstructured documents using advanced AI. 
+        Compare documents against customizable frameworks, identify key insights, and generate comprehensive assessments.
         
-        The Framework Assessment Workbench is an experimental laboratory for exploring how AI 
-        can transform unstructured documents into structured insights. It demonstrates advanced 
-        document intelligence techniques focused on **framework-guided assessment** - evaluating 
-        content against structured criteria you define.
-        
-        ## 💼 How to Use
-        
-        1. Navigate to the **Framework Assessment** page to assess documents against frameworks
-        2. Use the **Framework Builder** page to create or upload an assessment framework
-        3. Explore results in the **Results Explorer**
-        4. Experiment with different strategies in the **Experiment Lab**
-        
-        ## 🚀 Getting Started
-        
-        Use the sidebar navigation to access the different modules of the workbench.
+        ### Key Benefits
         """
     )
     
     # Create metrics with the new UI components
     metrics = [
-        {"label": "Multi-Agent Extractors", "value": "✅"},
-        {"label": "LLM-Powered Analysis", "value": "✅"},
-        {"label": "Structured Evidence Collection", "value": "✅"},
+        {"label": "Structured Analysis", "value": "✓", "description": "Transform unstructured content into actionable insights"},
+        {"label": "Custom Frameworks", "value": "✓", "description": "Create and use your own assessment frameworks"},
+        {"label": "Evidence-Based", "value": "✓", "description": "All assessments linked directly to document evidence"}
     ]
     
     ui_components.metric_row(metrics)
     
     # Create feature cards
-    st.markdown("## ✨ Key Features")
+    st.markdown("## How It Works")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        with ui_components.card_container("Dynamic Assessment Planning"):
+        with ui_components.card_container("1. Create Framework"):
+            st.markdown("📋")
             st.markdown(
                 """
-                Rather than using a fixed pipeline, each assessment begins with a Meta Planner that designs a custom 
-                processing strategy based on the document and framework.
+                Define your assessment criteria in a structured framework. 
+                Use existing templates or create custom frameworks for your specific needs.
                 """
             )
         ui_components.end_card_container()
         
     with col2:
-        with ui_components.card_container("Configurable Agent Deployment"):
+        with ui_components.card_container("2. Upload Document"):
+            st.markdown("📄")
             st.markdown(
                 """
-                Agents are configured and deployed according to the strategy, with customized instructions 
-                for each assessment to optimize analysis.
+                Upload a document to be assessed against your framework.
+                The system works with various document formats and content types.
                 """
             )
         ui_components.end_card_container()
         
     with col3:
-        with ui_components.card_container("Interactive Exploration"):
+        with ui_components.card_container("3. Review Insights"):
+            st.markdown("📊")
             st.markdown(
                 """
-                Review and modify assessment strategies, comparing different approaches to see what works best
-                for your specific document types and frameworks.
+                Get a comprehensive assessment with ratings, evidence, and structured insights.
+                Export results or dig deeper into specific areas.
                 """
             )
         ui_components.end_card_container()
+    
+    # Call to action
+    st.markdown(
+        """
+        ## Get Started
+        
+        Use the sidebar navigation to access the main tools:
+        
+        - **Framework Assessment**: Assess documents against frameworks
+        - **Pipeline Viewer**: Inspect the analysis process in detail
+        - **Assessment Viewer**: Explore results with enhanced visualization
+        """
+    )
+    
+    # Sample images or information
+    st.markdown("## Sample Framework Assessment")
+    
+    # Add a sample image or description
+    st.markdown(
+        """
+        <div style="background-color: #1F2937; padding: 20px; border-radius: 10px; 
+             border: 1px solid #3B4252; text-align: center; margin-top: 15px;">
+            <div style="color: #E0E0E0; margin-bottom: 10px;">Sample Assessment Result</div>
+            <div style="font-size: 4rem; color: #4F8BF9;">📊</div>
+            <div style="color: #A0A0A0; font-style: italic; margin-top: 10px;">
+                Upload a document to see a complete assessment with ratings, evidence, and recommendations.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # Main function
 def main():
@@ -240,7 +277,7 @@ def main():
     # Check for API key
     if not env_loaded:
         st.warning(
-            "OPENAI_API_KEY not found in environment variables. "
+            "OpenAI API Key not found in environment variables. "
             "Please add it to your .env file to use the application."
         )
         
@@ -252,7 +289,7 @@ def main():
                 OPENAI_API_KEY=your_openai_api_key_here
                 
                 # You can also add other configuration options:
-                # MODEL=gpt-4
+                # MODEL=gpt-4-turbo
                 # TOKEN_BUDGET=50000
                 """
             )
@@ -279,13 +316,13 @@ def create_sample_framework():
     # Create a simple sample framework
     sample_framework = {
         "id": "sample_framework",
-        "name": "Sample Assessment Framework",
-        "description": "A sample framework for demonstration purposes",
+        "name": "Content Quality Framework",
+        "description": "A framework for assessing document content quality and structure",
         "dimensions": [
             {
                 "id": "dimension_1",
                 "name": "Content Quality",
-                "description": "Assessment of overall content quality",
+                "description": "Assessment of overall content quality and clarity",
                 "criteria": [
                     {
                         "id": "criterion_1_1",
@@ -302,6 +339,17 @@ def create_sample_framework():
                     },
                     {
                         "id": "criterion_1_2",
+                        "name": "Accuracy",
+                        "question": "How accurate is the information in the document?",
+                        "scoring_method": "scale_1_5",
+                        "scoring_definitions": {
+                            "1": "Significant inaccuracies found",
+                            "3": "Generally accurate with minor errors",
+                            "5": "Highly accurate with verified information"
+                        }
+                    },
+                    {
+                        "id": "criterion_1_3",
                         "name": "Completeness",
                         "question": "How complete and comprehensive is the content?",
                         "scoring_method": "scale_1_5",
@@ -315,8 +363,8 @@ def create_sample_framework():
             },
             {
                 "id": "dimension_2",
-                "name": "Structure",
-                "description": "Assessment of document organization and structure",
+                "name": "Document Structure",
+                "description": "Assessment of document organization and formatting",
                 "criteria": [
                     {
                         "id": "criterion_2_1",
@@ -332,10 +380,23 @@ def create_sample_framework():
                     {
                         "id": "criterion_2_2",
                         "name": "Formatting",
-                        "question": "Is the document properly formatted?",
-                        "scoring_method": "evidence_based",
-                        "evidence_requirements": {
-                            "description": "Evidence of proper formatting, headings, lists, etc."
+                        "question": "Is the document properly formatted with headings, sections, and visual aids?",
+                        "scoring_method": "scale_1_5",
+                        "scoring_definitions": {
+                            "1": "Poor formatting, lacks structure",
+                            "3": "Adequate formatting with basic structure",
+                            "5": "Excellent formatting with clear hierarchy"
+                        }
+                    },
+                    {
+                        "id": "criterion_2_3",
+                        "name": "Accessibility",
+                        "question": "How accessible is the document for different readers?",
+                        "scoring_method": "scale_1_5",
+                        "scoring_definitions": {
+                            "1": "Not accessible, difficult for many readers",
+                            "3": "Moderately accessible with some barriers",
+                            "5": "Highly accessible for diverse readers"
                         }
                     }
                 ]
