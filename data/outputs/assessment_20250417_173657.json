@@ -1,0 +1,826 @@
+{
+  "scorecard": {
+    "title": "Financial & Alien Readiness Framework Assessment Scorecard",
+    "overall_rating": 4.5,
+    "executive_summary": "The company's overall assessment reveals a robust performance across key dimensions, indicating a well-rounded and forward-thinking organization. With exceptional financial health, strategic initiatives focused on AI technologies, and a unique readiness for extraordinary risks like alien invasions, the company showcases a diverse range of strengths. These strengths are underpinned by effective leadership, proactive planning, and a clear strategic vision. While no weaknesses were identified in the assessments, there is room for improvement in aligning strategic initiatives with financial goals and ensuring sustainability in addressing extraordinary risks. To capitalize on the strengths and address potential gaps, the company should consider enhancing cross-functional collaboration, diversifying risk management strategies, and optimizing resource allocation for sustained growth and resilience.",
+    "key_strengths": [
+      "Strong financial health with a solid liquidity position",
+      "Clear focus on leveraging AI technologies for customer experience enhancement",
+      "Proactive approach to addressing extraordinary risks",
+      "Effective leadership in executing strategic initiatives",
+      "Comprehensive readiness for potential alien invasion risks"
+    ],
+    "key_improvements": [
+      "Alignment of strategic initiatives with financial goals",
+      "Sustainability in addressing extraordinary risks",
+      "Enhanced cross-functional collaboration",
+      "Diversification of risk management strategies",
+      "Optimization of resource allocation"
+    ],
+    "recommendations": [
+      "Establish a cross-functional task force to align strategic initiatives with financial objectives",
+      "Conduct regular risk assessments to ensure sustainability in addressing extraordinary risks",
+      "Enhance communication and collaboration between departments to foster innovation and efficiency",
+      "Diversify risk management approaches to mitigate potential threats effectively",
+      "Implement a resource allocation framework to optimize investments and operational efficiency"
+    ],
+    "dimensions": [
+      {
+        "id": "financial_health",
+        "name": "Financial Health",
+        "average_rating": 4.5,
+        "summary": "The company demonstrates exceptional financial health with a strong liquidity position, healthy current and debt ratios, and proactive cost-cutting measures. The evidence consistently supports the company's ability to meet short-term obligations, maintain long-term solvency, and ensure financial stability.",
+        "strengths": [
+          "Strong liquidity position with $10 million cash reserve",
+          "Healthy current ratio of 2.5",
+          "Solid long-term solvency with low debt-to-equity ratio"
+        ],
+        "weaknesses": [
+          "None identified"
+        ],
+        "criteria": [
+          {
+            "id": "liquidity",
+            "name": "Liquidity",
+            "rating": 5.0,
+            "rationale": "The company has a strong liquidity position with a healthy cash reserve of $10 million, a current ratio of 2.5, and access to additional capital. The evidence consistently highlights the company's ability to meet short-term obligations and navigate cash flow challenges effectively.",
+            "assessment_type": "direct",
+            "confidence": 0.9,
+            "evidence_count": 1,
+            "evidence_categories": {
+              "uncategorized_neutral": 1
+            }
+          },
+          {
+            "id": "solvency",
+            "name": "Solvency",
+            "rating": 4.0,
+            "rationale": "The company demonstrates solid long-term solvency with a low debt-to-equity ratio of 0.2, a high current ratio of 2.5, and $10 million in cash reserves. The proactive cost-cutting measures further support the company's strong financial stability.",
+            "assessment_type": "direct",
+            "confidence": 0.8,
+            "evidence_count": 1,
+            "evidence_categories": {
+              "uncategorized_neutral": 1
+            }
+          }
+        ]
+      },
+      {
+        "id": "strategic_initiatives",
+        "name": "Strategic Initiatives",
+        "average_rating": 4.0,
+        "summary": "The company demonstrates a strong commitment to investing in AI technologies, with a clear focus on enhancing customer experience. The effective leadership has successfully executed strategic initiatives, leading to a 15% increase in market share. These strengths indicate a robust investment strategy and consistent strategic execution in driving company growth.",
+        "strengths": [
+          "Clear focus on leveraging AI for customer experience enhancement",
+          "Robust investment strategy in AI technologies",
+          "Effective leadership in executing strategy"
+        ],
+        "weaknesses": [],
+        "criteria": [
+          {
+            "id": "ai_investment",
+            "name": "AI Investment",
+            "rating": 4.0,
+            "rationale": "The company has allocated $10 million towards AI research and development this year, with a clear focus on leveraging machine learning algorithms for customer experience enhancement. The commitment to investing heavily in AI technologies and exploring partnerships with AI startups demonstrates a robust investment strategy. This evidence aligns with a significant investment in AI with a clear strategy.",
+            "assessment_type": "direct",
+            "confidence": 0.9,
+            "evidence_count": 1,
+            "evidence_categories": {
+              "uncategorized_neutral": 1
+            }
+          },
+          {
+            "id": "leadership",
+            "name": "Leadership",
+            "rating": 4.0,
+            "rationale": "The evidence highlights the effective leadership in executing strategy, including the successful implementation of a new strategic direction, clear vision, effective communication, and strong decision-making. The 15% increase in market share serves as a quantitative measure of leadership's impact on driving company growth. These factors support a rating of strong leadership with consistent strategic execution.",
+            "assessment_type": "direct",
+            "confidence": 0.8,
+            "evidence_count": 1,
+            "evidence_categories": {
+              "uncategorized_neutral": 1
+            }
+          }
+        ]
+      },
+      {
+        "id": "extraordinary_risks",
+        "name": "Extraordinary Risks",
+        "average_rating": 5.0,
+        "summary": "The company demonstrates a high level of readiness for potential alien invasion risks through a comprehensive approach that includes preparing for extraterrestrial threats in their disaster preparedness plan and conducting drills to test responses. The proactive stance taken by the company in addressing alien invasion risks is a key strength in this dimension.",
+        "strengths": [
+          "Comprehensive approach to alien invasion preparedness",
+          "Inclusion of extraterrestrial threats in disaster preparedness plan",
+          "Conducting drills to test responses to alien invasion risks"
+        ],
+        "weaknesses": [],
+        "criteria": [
+          {
+            "id": "alien_invasion",
+            "name": "Alien Invasion Preparedness",
+            "rating": 5.0,
+            "rationale": "The company demonstrates a comprehensive approach to alien invasion preparedness by including potential extraterrestrial threats in their disaster preparedness plan and conducting drills to test responses to these risks. This proactive stance indicates a high level of readiness for a potential alien invasion, aligning with a score of 5.",
+            "assessment_type": "direct",
+            "confidence": 0.9,
+            "evidence_count": 1,
+            "evidence_categories": {
+              "uncategorized_neutral": 1
+            }
+          }
+        ]
+      }
+    ],
+    "criteria_coverage": 1.0,
+    "assessment_types": {
+      "direct": 5,
+      "inferred": 0,
+      "insufficient_evidence": 0
+    },
+    "assessment_reliability": "High",
+    "generated_at": "2025-04-17T17:36:57.035529"
+  },
+  "reports": {
+    "formats": {
+      "scorecard": {
+        "title": "Financial & Alien Readiness Framework Assessment Scorecard",
+        "overall_rating": 4.5,
+        "executive_summary": "The company's overall assessment reveals a robust performance across key dimensions, indicating a well-rounded and forward-thinking organization. With exceptional financial health, strategic initiatives focused on AI technologies, and a unique readiness for extraordinary risks like alien invasions, the company showcases a diverse range of strengths. These strengths are underpinned by effective leadership, proactive planning, and a clear strategic vision. While no weaknesses were identified in the assessments, there is room for improvement in aligning strategic initiatives with financial goals and ensuring sustainability in addressing extraordinary risks. To capitalize on the strengths and address potential gaps, the company should consider enhancing cross-functional collaboration, diversifying risk management strategies, and optimizing resource allocation for sustained growth and resilience.",
+        "key_strengths": [
+          "Strong financial health with a solid liquidity position",
+          "Clear focus on leveraging AI technologies for customer experience enhancement",
+          "Proactive approach to addressing extraordinary risks",
+          "Effective leadership in executing strategic initiatives",
+          "Comprehensive readiness for potential alien invasion risks"
+        ],
+        "key_improvements": [
+          "Alignment of strategic initiatives with financial goals",
+          "Sustainability in addressing extraordinary risks",
+          "Enhanced cross-functional collaboration",
+          "Diversification of risk management strategies",
+          "Optimization of resource allocation"
+        ],
+        "recommendations": [
+          "Establish a cross-functional task force to align strategic initiatives with financial objectives",
+          "Conduct regular risk assessments to ensure sustainability in addressing extraordinary risks",
+          "Enhance communication and collaboration between departments to foster innovation and efficiency",
+          "Diversify risk management approaches to mitigate potential threats effectively",
+          "Implement a resource allocation framework to optimize investments and operational efficiency"
+        ],
+        "dimensions": [
+          {
+            "id": "financial_health",
+            "name": "Financial Health",
+            "average_rating": 4.5,
+            "summary": "The company demonstrates exceptional financial health with a strong liquidity position, healthy current and debt ratios, and proactive cost-cutting measures. The evidence consistently supports the company's ability to meet short-term obligations, maintain long-term solvency, and ensure financial stability.",
+            "strengths": [
+              "Strong liquidity position with $10 million cash reserve",
+              "Healthy current ratio of 2.5",
+              "Solid long-term solvency with low debt-to-equity ratio"
+            ],
+            "weaknesses": [
+              "None identified"
+            ],
+            "criteria": [
+              {
+                "id": "liquidity",
+                "name": "Liquidity",
+                "rating": 5.0,
+                "rationale": "The company has a strong liquidity position with a healthy cash reserve of $10 million, a current ratio of 2.5, and access to additional capital. The evidence consistently highlights the company's ability to meet short-term obligations and navigate cash flow challenges effectively.",
+                "assessment_type": "direct",
+                "confidence": 0.9,
+                "evidence_count": 1,
+                "evidence_categories": {
+                  "uncategorized_neutral": 1
+                }
+              },
+              {
+                "id": "solvency",
+                "name": "Solvency",
+                "rating": 4.0,
+                "rationale": "The company demonstrates solid long-term solvency with a low debt-to-equity ratio of 0.2, a high current ratio of 2.5, and $10 million in cash reserves. The proactive cost-cutting measures further support the company's strong financial stability.",
+                "assessment_type": "direct",
+                "confidence": 0.8,
+                "evidence_count": 1,
+                "evidence_categories": {
+                  "uncategorized_neutral": 1
+                }
+              }
+            ]
+          },
+          {
+            "id": "strategic_initiatives",
+            "name": "Strategic Initiatives",
+            "average_rating": 4.0,
+            "summary": "The company demonstrates a strong commitment to investing in AI technologies, with a clear focus on enhancing customer experience. The effective leadership has successfully executed strategic initiatives, leading to a 15% increase in market share. These strengths indicate a robust investment strategy and consistent strategic execution in driving company growth.",
+            "strengths": [
+              "Clear focus on leveraging AI for customer experience enhancement",
+              "Robust investment strategy in AI technologies",
+              "Effective leadership in executing strategy"
+            ],
+            "weaknesses": [],
+            "criteria": [
+              {
+                "id": "ai_investment",
+                "name": "AI Investment",
+                "rating": 4.0,
+                "rationale": "The company has allocated $10 million towards AI research and development this year, with a clear focus on leveraging machine learning algorithms for customer experience enhancement. The commitment to investing heavily in AI technologies and exploring partnerships with AI startups demonstrates a robust investment strategy. This evidence aligns with a significant investment in AI with a clear strategy.",
+                "assessment_type": "direct",
+                "confidence": 0.9,
+                "evidence_count": 1,
+                "evidence_categories": {
+                  "uncategorized_neutral": 1
+                }
+              },
+              {
+                "id": "leadership",
+                "name": "Leadership",
+                "rating": 4.0,
+                "rationale": "The evidence highlights the effective leadership in executing strategy, including the successful implementation of a new strategic direction, clear vision, effective communication, and strong decision-making. The 15% increase in market share serves as a quantitative measure of leadership's impact on driving company growth. These factors support a rating of strong leadership with consistent strategic execution.",
+                "assessment_type": "direct",
+                "confidence": 0.8,
+                "evidence_count": 1,
+                "evidence_categories": {
+                  "uncategorized_neutral": 1
+                }
+              }
+            ]
+          },
+          {
+            "id": "extraordinary_risks",
+            "name": "Extraordinary Risks",
+            "average_rating": 5.0,
+            "summary": "The company demonstrates a high level of readiness for potential alien invasion risks through a comprehensive approach that includes preparing for extraterrestrial threats in their disaster preparedness plan and conducting drills to test responses. The proactive stance taken by the company in addressing alien invasion risks is a key strength in this dimension.",
+            "strengths": [
+              "Comprehensive approach to alien invasion preparedness",
+              "Inclusion of extraterrestrial threats in disaster preparedness plan",
+              "Conducting drills to test responses to alien invasion risks"
+            ],
+            "weaknesses": [],
+            "criteria": [
+              {
+                "id": "alien_invasion",
+                "name": "Alien Invasion Preparedness",
+                "rating": 5.0,
+                "rationale": "The company demonstrates a comprehensive approach to alien invasion preparedness by including potential extraterrestrial threats in their disaster preparedness plan and conducting drills to test responses to these risks. This proactive stance indicates a high level of readiness for a potential alien invasion, aligning with a score of 5.",
+                "assessment_type": "direct",
+                "confidence": 0.9,
+                "evidence_count": 1,
+                "evidence_categories": {
+                  "uncategorized_neutral": 1
+                }
+              }
+            ]
+          }
+        ],
+        "criteria_coverage": 1.0,
+        "assessment_types": {
+          "direct": 5,
+          "inferred": 0,
+          "insufficient_evidence": 0
+        },
+        "assessment_reliability": "High",
+        "generated_at": "2025-04-17T17:36:57.035529"
+      },
+      "visualization_data": {
+        "title": "Financial & Alien Readiness Framework Visualization Data",
+        "overall_rating": 4.5,
+        "dimension_ratings": [
+          {
+            "dimension": "Financial Health",
+            "rating": 4.5
+          },
+          {
+            "dimension": "Strategic Initiatives",
+            "rating": 4.0
+          },
+          {
+            "dimension": "Extraordinary Risks",
+            "rating": 5.0
+          }
+        ],
+        "criterion_ratings": [
+          {
+            "dimension": "Financial Health",
+            "criterion": "Liquidity",
+            "rating": 5.0,
+            "assessment_type": "direct"
+          },
+          {
+            "dimension": "Financial Health",
+            "criterion": "Solvency",
+            "rating": 4.0,
+            "assessment_type": "direct"
+          },
+          {
+            "dimension": "Strategic Initiatives",
+            "criterion": "AI Investment",
+            "rating": 4.0,
+            "assessment_type": "direct"
+          },
+          {
+            "dimension": "Strategic Initiatives",
+            "criterion": "Leadership",
+            "rating": 4.0,
+            "assessment_type": "direct"
+          },
+          {
+            "dimension": "Extraordinary Risks",
+            "criterion": "Alien Invasion Preparedness",
+            "rating": 5.0,
+            "assessment_type": "direct"
+          }
+        ],
+        "assessment_types": [
+          {
+            "type": "Direct",
+            "count": 5
+          },
+          {
+            "type": "Inferred",
+            "count": 0
+          },
+          {
+            "type": "Insufficient Evidence",
+            "count": 0
+          }
+        ],
+        "criteria_coverage": 1.0,
+        "key_metrics": {
+          "total_criteria": 5,
+          "criteria_assessed": 5,
+          "direct_percentage": 1.0
+        }
+      }
+    }
+  },
+  "metadata": {
+    "framework_id": "financial_alien_framework",
+    "framework_name": "Financial & Alien Readiness Framework",
+    "document_name": "dellEarningCallTranscript.txt",
+    "document_type": "earnings_call_transcript",
+    "entity_name": "Dell Technologies Inc",
+    "run_id": "90506bcc-3431-4de6-980e-33e3af861d73",
+    "start_time": "2025-04-17T21:36:00.771880+00:00",
+    "end_time": "2025-04-17T21:36:57.037344+00:00",
+    "processing_time": 56.265465,
+    "document_length": 53917,
+    "chunks_count": 14,
+    "options": {
+      "document_name": "dellEarningCallTranscript.txt",
+      "document_type": "earnings_call_transcript",
+      "document_bias": {
+        "orientation": "neutral",
+        "confidence": 0.5
+      },
+      "primary_entity": {
+        "name": "Dell Technologies Inc",
+        "type": "company",
+        "confidence": 0.7
+      },
+      "model": "gpt-3.5-turbo",
+      "report_type": "scorecard",
+      "include_evidence": true,
+      "include_confidence": true,
+      "infer_missing": true,
+      "include_assessment_types": true,
+      "extraction_strategy": "semantic",
+      "confidence_threshold": 0.1,
+      "relevance_levels": [
+        "Direct",
+        "Indirect",
+        "Contextual"
+      ],
+      "sentiment_types": [
+        "Positive",
+        "Negative",
+        "Neutral"
+      ],
+      "max_concurrent": 3,
+      "use_combined_evaluation": true,
+      "chunking_method": "auto"
+    },
+    "document_bias": {
+      "orientation": "neutral",
+      "confidence": 0.5
+    },
+    "token_usage": {
+      "total": 15648,
+      "by_agent": {
+        "MetaPlanner": 2436,
+        "Evaluator": 13212
+      },
+      "by_stage": {}
+    }
+  },
+  "statistics": {
+    "total_criteria": 5,
+    "assessed_criteria": 5,
+    "assessment_coverage": 1.0,
+    "average_confidence": 0.8600000000000001,
+    "total_evidence": 5,
+    "evidence_per_criterion": 1.0,
+    "assessment_types": {
+      "direct": 5,
+      "inferred": 0,
+      "insufficient_evidence": 0
+    },
+    "dimensions": {
+      "financial_health": {
+        "name": "Financial Health",
+        "total_criteria": 2,
+        "assessed_criteria": 2,
+        "coverage": 1.0,
+        "average_rating": 4.5,
+        "ratings": [
+          5.0,
+          4.0
+        ]
+      },
+      "strategic_initiatives": {
+        "name": "Strategic Initiatives",
+        "total_criteria": 2,
+        "assessed_criteria": 2,
+        "coverage": 1.0,
+        "average_rating": 4.0,
+        "ratings": [
+          4.0,
+          4.0
+        ]
+      },
+      "extraordinary_risks": {
+        "name": "Extraordinary Risks",
+        "total_criteria": 1,
+        "assessed_criteria": 1,
+        "coverage": 1.0,
+        "average_rating": 5.0,
+        "ratings": [
+          5.0
+        ]
+      }
+    }
+  },
+  "warnings": [],
+  "errors": [],
+  "strategy": {
+    "strategy_type": "consolidated_evidence_packets",
+    "chunking_strategy": {
+      "method": "paragraph",
+      "size": 50,
+      "overlap": 5,
+      "rationale": "Using paragraph chunking to preserve speaker context in transcript/dialogue"
+    },
+    "agents": [
+      {
+        "agent_type": "extractor_liquidity",
+        "configuration": {
+          "criteria_ids": [
+            "liquidity"
+          ],
+          "dimension_ids": [
+            "financial_health"
+          ]
+        },
+        "instructions": "Look for mentions of cash reserves, short-term obligations, and cash flow concerns. Pay attention to phrases like 'liquidity position,' 'cash flow challenges,' and 'access to capital.' Evidence could include specific cash amounts, debt levels, or references to financial obligations."
+      },
+      {
+        "agent_type": "extractor_solvency",
+        "configuration": {
+          "criteria_ids": [
+            "solvency"
+          ],
+          "dimension_ids": [
+            "financial_health"
+          ]
+        },
+        "instructions": "Search for discussions on debt levels, balance sheet strength, and long-term solvency. Focus on terms like 'insolvency risk,' 'debt concerns,' and 'solvency position.' Evidence may involve debt ratios, balance sheet details, or mentions of financial stability."
+      },
+      {
+        "agent_type": "extractor_ai_investment",
+        "configuration": {
+          "criteria_ids": [
+            "ai_investment"
+          ],
+          "dimension_ids": [
+            "strategic_initiatives"
+          ]
+        },
+        "instructions": "Identify references to AI technologies, investment strategies, and innovation in AI. Look for phrases such as 'investment in AI,' 'AI strategy,' and 'applications of AI.' Evidence could include investment amounts, AI initiatives, or descriptions of AI projects."
+      },
+      {
+        "agent_type": "extractor_leadership",
+        "configuration": {
+          "criteria_ids": [
+            "leadership"
+          ],
+          "dimension_ids": [
+            "strategic_initiatives"
+          ]
+        },
+        "instructions": "Pay attention to discussions about strategic execution, leadership effectiveness, and consistency in strategy implementation. Search for terms like 'strategic execution,' 'leadership effectiveness,' and 'consistent strategy.' Evidence may involve examples of strategic decisions, leadership impact, or successful strategy implementation."
+      },
+      {
+        "agent_type": "extractor_alien_invasion",
+        "configuration": {
+          "criteria_ids": [
+            "alien_invasion"
+          ],
+          "dimension_ids": [
+            "extraordinary_risks"
+          ]
+        },
+        "instructions": "Focus on any mention of contingency plans, disaster preparedness, and responses to extraordinary risks. Look for phrases like 'alien invasion preparedness,' 'extraterrestrial threats,' and 'disaster plans.' Evidence could include details of contingency measures, disaster response protocols, or specific plans for extraordinary scenarios."
+      },
+      {
+        "agent_type": "evaluator",
+        "configuration": {
+          "evaluation_type": "consolidated_packet",
+          "use_combined_evaluation": true,
+          "criteria_groups": [
+            {
+              "dimension_id": "financial_health",
+              "dimension_name": "Financial Health",
+              "criteria": [
+                {
+                  "dimension_id": "financial_health",
+                  "criterion_id": "liquidity",
+                  "criterion_name": "Liquidity"
+                },
+                {
+                  "dimension_id": "financial_health",
+                  "criterion_id": "solvency",
+                  "criterion_name": "Solvency"
+                }
+              ],
+              "rationale": "Grouped for consistent evaluation within Financial Health"
+            },
+            {
+              "dimension_id": "strategic_initiatives",
+              "dimension_name": "Strategic Initiatives",
+              "criteria": [
+                {
+                  "dimension_id": "strategic_initiatives",
+                  "criterion_id": "ai_investment",
+                  "criterion_name": "AI Investment"
+                },
+                {
+                  "dimension_id": "strategic_initiatives",
+                  "criterion_id": "leadership",
+                  "criterion_name": "Leadership"
+                }
+              ],
+              "rationale": "Grouped for consistent evaluation within Strategic Initiatives"
+            }
+          ],
+          "confidence_threshold": 0.4,
+          "infer_missing": true,
+          "output_format": "scorecard"
+        },
+        "instructions": "Use the consolidated evidence packets to assess each criterion.\n\nEach evidence packet contains:\n- DIRECT QUOTES: Exact statements from the document\n- KEY METRICS: Numerical data and measurements\n- RELEVANCE ANALYSIS: Explanation of how the evidence relates to the criterion\n- ASSESSMENT IMPLICATION: What the evidence suggests about rating\n\nWhen evaluating criteria:\n\n1. EVIDENCE QUALITY\n   - Prioritize direct quotes and specific metrics\n   - Consider both the quantity and quality of evidence\n   - Note when evidence is particularly strong or limited\n\n2. ASSESSMENT APPROACH\n   - Make DIRECT assessments when evidence clearly addresses the criterion\n   - Make INFERRED assessments when evidence is limited but allows for reasonable inference\n   - Mark as INSUFFICIENT EVIDENCE when no meaningful assessment is possible\n\n3. RATIONALE CLARITY\n   - For direct assessments: Reference specific quotes and metrics\n   - For inferred assessments: Mark with [INFERRED] and explain your reasoning\n   - Be transparent about confidence levels\n\n4. CONSISTENCY\n   - Maintain consistent standards across related criteria\n   - Compare assessments within dimensions for calibration\n\nThis evaluation is for the Financial & Alien Readiness Framework framework. When evaluating financial criteria:\n- Look for specific financial metrics and KPIs\n- Pay attention to year-over-year comparisons\n- Consider both absolute numbers and trends\n- Note how executives contextualize financial results"
+      },
+      {
+        "agent_type": "reporter",
+        "configuration": {
+          "report_type": "scorecard",
+          "include_evidence": true,
+          "include_confidence": true,
+          "include_assessment_types": true,
+          "export_formats": [
+            "json",
+            "html",
+            "markdown"
+          ]
+        },
+        "instructions": "Create a structured scorecard from the evaluations.\nInclude evidence summaries and clearly distinguish between direct and inferred assessments."
+      }
+    ],
+    "processing_sequence": [
+      "extractor",
+      "extractor",
+      "extractor",
+      "extractor",
+      "extractor",
+      "evaluator",
+      "reporter"
+    ],
+    "document_analysis": {
+      "document_type": "earnings_call_transcript",
+      "document_structure": "simple_document",
+      "primary_entity": {
+        "name": "Dell Technologies Inc",
+        "type": "company",
+        "confidence": 0.7
+      },
+      "document_bias": {
+        "orientation": "neutral",
+        "confidence": 0.5
+      },
+      "keywords": [
+        "dell",
+        "technologies",
+        "solutions",
+        "services",
+        "segment",
+        "customers",
+        "cloud",
+        "infrastructure",
+        "provides",
+        "applications"
+      ]
+    },
+    "criteria_groups": [
+      {
+        "dimension_id": "financial_health",
+        "dimension_name": "Financial Health",
+        "criteria": [
+          {
+            "dimension_id": "financial_health",
+            "criterion_id": "liquidity",
+            "criterion_name": "Liquidity"
+          },
+          {
+            "dimension_id": "financial_health",
+            "criterion_id": "solvency",
+            "criterion_name": "Solvency"
+          }
+        ],
+        "rationale": "Grouped for consistent evaluation within Financial Health"
+      },
+      {
+        "dimension_id": "strategic_initiatives",
+        "dimension_name": "Strategic Initiatives",
+        "criteria": [
+          {
+            "dimension_id": "strategic_initiatives",
+            "criterion_id": "ai_investment",
+            "criterion_name": "AI Investment"
+          },
+          {
+            "dimension_id": "strategic_initiatives",
+            "criterion_id": "leadership",
+            "criterion_name": "Leadership"
+          }
+        ],
+        "rationale": "Grouped for consistent evaluation within Strategic Initiatives"
+      }
+    ],
+    "rationale": "Strategy optimized for consolidated evidence packets with two-pass extraction. Each criterion gets one comprehensive evidence packet from all document chunks.",
+    "approach_description": "This strategy first extracts evidence from each chunk for every criterion, then consolidates findings into one packet per criterion. The evaluator can perform combined evaluation for related criteria to ensure consistency and completeness.",
+    "output_schema": {
+      "title": "Financial & Alien Readiness Framework Assessment",
+      "type": "object",
+      "properties": {
+        "overall_assessment": {
+          "type": "object",
+          "properties": {
+            "average_rating": {
+              "type": "number"
+            },
+            "executive_summary": {
+              "type": "string"
+            },
+            "key_strengths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "key_improvements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "recommendations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "average_rating",
+            "executive_summary"
+          ]
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "average_rating": {
+                "type": "number"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "criteria": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "rating": {
+                      "type": "number"
+                    },
+                    "rationale": {
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "type": "number"
+                    },
+                    "strengths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "weaknesses": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "evidence_summary": {
+                      "type": "string"
+                    },
+                    "assessment_type": {
+                      "type": "string",
+                      "enum": [
+                        "direct",
+                        "inferred",
+                        "insufficient_evidence"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "rating",
+                    "rationale",
+                    "assessment_type"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "criteria"
+            ]
+          }
+        }
+      },
+      "required": [
+        "overall_assessment",
+        "dimensions"
+      ]
+    }
+  },
+  "diagnostics": {
+    "execution_start": 1744925760.771994,
+    "stages_completed": [
+      {
+        "stage": "strategy_design",
+        "time": 5.296370983123779,
+        "result": "success"
+      },
+      {
+        "stage": "document_analysis",
+        "time": 0.00018787384033203125,
+        "result": "success"
+      },
+      {
+        "stage": "chunking",
+        "time": 0.002756834030151367,
+        "result": "success",
+        "chunks": 14
+      }
+    ],
+    "evidence_checks": [
+      {
+        "stage": "after_extraction",
+        "time": 35.977744817733765,
+        "total_evidence": 5,
+        "criteria_with_evidence": 5
+      },
+      {
+        "stage": "after_evaluation",
+        "time": 50.96673774719238,
+        "assessed_criteria": 5,
+        "coverage": 1.0
+      }
+    ],
+    "token_usage": {}
+  }
+}

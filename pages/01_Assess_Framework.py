@@ -1,8 +1,8 @@
 """
-01_Framework_Assessment - Streamlined assessment page for Framework Assessment Workbench
+01_Framework_Assessment - Simplified enhanced version
 
 This page provides a clean, consistent interface for assessing documents against frameworks,
-with proper error handling and result display.
+with improved visual design and user experience.
 """
 
 import os
@@ -42,6 +42,51 @@ st.set_page_config(
 # Apply custom styles
 ui_styles.apply_styles()
 
+# Add custom CSS for improved appearance
+st.markdown("""
+<style>
+/* Enhanced card styling */
+.enhanced-card {
+    border-radius: 12px;
+    padding: 25px;
+    background-color: #1F2937;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    margin-bottom: 25px;
+    border: 1px solid #3B4252;
+    transition: all 0.3s ease;
+}
+
+/* Card header */
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(59, 66, 82, 0.5);
+    padding-bottom: 15px;
+}
+
+.card-header h3 {
+    margin: 0;
+    font-weight: 600;
+    color: #E0E0E0;
+}
+
+.card-icon {
+    font-size: 1.5rem;
+    color: #4F8BF9;
+    margin-right: 10px;
+}
+
+/* Header container */
+.header-container {
+    padding: 1.5rem 0;
+    border-bottom: 1px solid rgba(59, 66, 82, 0.5);
+    margin-bottom: 2rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
 def main():
     """Main application function for framework assessment."""
     # Page header
@@ -49,8 +94,7 @@ def main():
     st.markdown(
         """
         Assess a document against a structured framework using our AI system. 
-        The system will analyze your document, extract relevant evidence, and provide a structured assessment 
-        with clear distinction between direct and inferred findings.
+        The system will analyze your document, extract relevant evidence, and provide a structured assessment.
         """
     )
     
@@ -67,25 +111,27 @@ def main():
     
     with tabs[0]:
         # Framework selection
+        st.subheader("1. Select Framework")
         framework = display_framework_selection()
         
         # Document upload
+        st.subheader("2. Upload Document")
         document = display_document_upload()
         
         # Assessment options
+        st.subheader("3. Configure Options")
         options = display_assessment_options()
         
         # Add assessment button and handle assessment process
-        start_col, _ = st.columns([1, 3])
-        with start_col:
-            start_assessment = st.button(
-                "Start Assessment", 
-                key="start_assessment_btn", 
-                type="primary", 
-                disabled=not (framework and document),
-                help="Start the assessment process",
-                use_container_width=True
-            )
+        st.subheader("4. Start Assessment")
+        start_assessment = st.button(
+            "Start Assessment", 
+            key="start_assessment_btn", 
+            type="primary", 
+            disabled=not (framework and document),
+            help="Start the assessment process",
+            use_container_width=True
+        )
         
         if start_assessment:
             if not framework:
@@ -150,7 +196,7 @@ def main():
 def update_progress(progress_bar, status_text, progress, message):
     """Update progress indicators."""
     progress_bar.progress(progress)
-    status_text.markdown(f"**Status:** {message}")
+    status_text.text(f"Status: {message}")
 
 async def perform_assessment(document, framework, options, progress_callback=None):
     """
@@ -296,13 +342,21 @@ def display_assessment_results(assessment_result):
     
     with col1:
         st.markdown("### Key Strengths")
-        for strength in scorecard.get("key_strengths", []):
-            st.markdown(f"- {strength}")
+        strengths = scorecard.get("key_strengths", [])
+        if strengths:
+            for strength in strengths:
+                st.markdown(f"- {strength}")
+        else:
+            st.info("No key strengths identified.")
     
     with col2:
         st.markdown("### Key Improvements")
-        for improvement in scorecard.get("key_improvements", []):
-            st.markdown(f"- {improvement}")
+        improvements = scorecard.get("key_improvements", [])
+        if improvements:
+            for improvement in improvements:
+                st.markdown(f"- {improvement}")
+        else:
+            st.info("No key improvements identified.")
     
     # Display dimension results
     st.markdown("### Dimension Results")
@@ -367,13 +421,21 @@ def display_dimension_results(dimension):
     
     with col1:
         st.markdown("#### Strengths")
-        for strength in dimension.get("strengths", []):
-            st.markdown(f"- {strength}")
+        strengths = dimension.get("strengths", [])
+        if strengths:
+            for strength in strengths:
+                st.markdown(f"- {strength}")
+        else:
+            st.info("No strengths identified for this dimension.")
     
     with col2:
         st.markdown("#### Weaknesses")
-        for weakness in dimension.get("weaknesses", []):
-            st.markdown(f"- {weakness}")
+        weaknesses = dimension.get("weaknesses", [])
+        if weaknesses:
+            for weakness in weaknesses:
+                st.markdown(f"- {weakness}")
+        else:
+            st.info("No weaknesses identified for this dimension.")
     
     # Display criteria
     st.markdown("#### Criteria Assessments")
@@ -413,6 +475,25 @@ def display_dimension_results(dimension):
     if criteria_data:
         df = pd.DataFrame(criteria_data)
         st.dataframe(df, use_container_width=True)
+        
+        # Create expanders for detailed view of each criterion
+        st.markdown("#### Detailed Criterion Analysis")
+        
+        for criterion in criteria:
+            criterion_name = criterion.get("name", "Unknown")
+            with st.expander(f"{criterion_name}", expanded=False):
+                st.markdown(f"**Rating:** {criterion.get('rating', 'N/A')}")
+                st.markdown(f"**Assessment Type:** {criterion.get('assessment_type', 'Unknown').replace('_', ' ').title()}")
+                st.markdown(f"**Rationale:** {criterion.get('rationale', 'No rationale provided')}")
+                
+                # Display evidence if available
+                evidence = criterion.get("evidence", [])
+                if evidence:
+                    st.markdown("**Evidence:**")
+                    for item in evidence:
+                        st.markdown(f"> {item.get('text', 'No text')}")
+                        if item.get("relevance"):
+                            st.markdown(f"*Relevance: {item.get('relevance')}*")
 
 def display_framework_selection():
     """
@@ -421,183 +502,120 @@ def display_framework_selection():
     Returns:
         Selected framework or None if no framework selected
     """
-    with ui_components.card_container("Framework Selection"):
-        # List available frameworks
-        framework_files = path_utils.list_files("frameworks", ".json")
-        framework_names = []
+    # List available frameworks
+    framework_files = path_utils.list_files("frameworks", ".json")
+    framework_names = []
+    
+    for file_path in framework_files:
+        try:
+            with open(file_path, "r") as f:
+                framework = json.load(f)
+                name = framework.get("name", file_path.stem)
+                framework_names.append((name, file_path.name))
+        except Exception as e:
+            st.warning(f"Failed to load framework {file_path.name}: {str(e)}")
+    
+    # Sort by name
+    framework_names.sort(key=lambda x: x[0])
+    
+    # Add framework options
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # Create list of names for selectbox
+        framework_options = [name for name, _ in framework_names]
+        if not framework_options:
+            st.info("No frameworks available. Please create a framework first.")
+            return None
+            
+        selected_index = 0
         
-        for file_path in framework_files:
+        # Find previously selected framework if exists
+        if hasattr(st.session_state, "selected_framework_name"):
+            if st.session_state.selected_framework_name in framework_options:
+                selected_index = framework_options.index(st.session_state.selected_framework_name)
+        
+        selected_framework_name = st.selectbox(
+            "Select Assessment Framework",
+            options=framework_options,
+            index=selected_index,
+            key="framework_selector",
+            help="Select a framework to assess your document against"
+        )
+        
+        # Store selection in session state
+        st.session_state.selected_framework_name = selected_framework_name
+        
+        # Find the file for the selected framework
+        selected_file = None
+        for name, file_name in framework_names:
+            if name == selected_framework_name:
+                selected_file = file_name
+                break
+        
+        if selected_file:
+            # Load the framework
             try:
-                with open(file_path, "r") as f:
-                    framework = json.load(f)
-                    name = framework.get("name", file_path.stem)
-                    framework_names.append((name, file_path.name))
+                framework = path_utils.load_json("frameworks", selected_file)
+                st.session_state.framework = framework
             except Exception as e:
-                st.warning(f"Failed to load framework {file_path.name}: {str(e)}")
-        
-        # Sort by name
-        framework_names.sort(key=lambda x: x[0])
-        
-        # Add framework options
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            # Create list of names for selectbox
-            framework_options = [name for name, _ in framework_names]
-            if not framework_options:
-                st.info("No frameworks available. Please create a framework first.")
-                ui_components.end_card_container()
+                st.error(f"Failed to load framework: {str(e)}")
                 return None
-                
-            selected_index = 0
-            
-            # Find previously selected framework if exists
-            if hasattr(st.session_state, "selected_framework_name"):
-                if st.session_state.selected_framework_name in framework_options:
-                    selected_index = framework_options.index(st.session_state.selected_framework_name)
-            
-            selected_framework_name = st.selectbox(
-                "Select Assessment Framework",
-                options=framework_options,
-                index=selected_index,
-                key="framework_selector"
-            )
-            
-            # Store selection in session state
-            st.session_state.selected_framework_name = selected_framework_name
-            
-            # Find the file for the selected framework
-            selected_file = None
-            for name, file_name in framework_names:
-                if name == selected_framework_name:
-                    selected_file = file_name
-                    break
-            
-            if selected_file:
-                # Load the framework
-                try:
-                    framework = path_utils.load_json("frameworks", selected_file)
-                    st.session_state.framework = framework
-                except Exception as e:
-                    st.error(f"Failed to load framework: {str(e)}")
-                    ui_components.end_card_container()
-                    return None
-            else:
-                st.error("Failed to find selected framework file")
-                ui_components.end_card_container()
-                return None
-        
-        with col2:
-            st.write("")
-            st.write("")
-            if st.button("Create New Framework", key="create_framework_btn"):
-                st.session_state.current_page = "02_Framework_Builder"
-                st.rerun()
-        
-        # Display framework info
-        if hasattr(st.session_state, "framework"):
-            framework = st.session_state.framework
-            
-            # Count dimensions and criteria
-            dimension_count = len(framework.get("dimensions", []))
-            criteria_count = sum(len(dimension.get("criteria", [])) for dimension in framework.get("dimensions", []))
-            
-            # Create metrics
-            metrics = [
-                {"label": "Dimensions", "value": dimension_count},
-                {"label": "Criteria", "value": criteria_count},
-                {"label": "Framework ID", "value": framework.get("id", "unknown")}
-            ]
-            
-            ui_components.metric_row(metrics)
-            
-            # Display framework description if available
-            description = framework.get("description")
-            if description:
-                st.markdown(f"**Description:** {description}")
-            
-            # Display framework structure preview
-            if st.checkbox("Explore Framework Structure", key="explore_framework"):
-                display_framework_structure(framework)
-            
-    ui_components.end_card_container()
-    return framework
-
-def display_framework_structure(framework):
-    """
-    Display interactive framework structure preview.
-    
-    Args:
-        framework: Framework data
-    """
-    st.markdown("### Framework Structure")
-    
-    # Create tabs for structure views
-    structure_tabs = st.tabs(["Dimension View", "Criterion Overview"])
-    
-    with structure_tabs[0]:
-        # Display dimensions and criteria in a tree structure
-        for i, dimension in enumerate(framework.get("dimensions", [])):
-            dim_name = dimension.get("name", f"Dimension {i+1}")
-            dim_id = dimension.get("id", "")
-            
-            with st.expander(dim_name, expanded=False):
-                # Display dimension description if available
-                description = dimension.get("description", "")
-                if description:
-                    st.markdown(f"*{description}*")
-                
-                # Display criteria
-                criteria = dimension.get("criteria", [])
-                
-                if criteria:
-                    # Create dataframe for criteria
-                    criteria_data = []
-                    
-                    for criterion in criteria:
-                        crit_name = criterion.get("name", "")
-                        crit_id = criterion.get("id", "")
-                        crit_question = criterion.get("question", "")
-                        scoring_method = criterion.get("scoring_method", "")
-                        
-                        criteria_data.append({
-                            "Criterion": crit_name,
-                            "ID": crit_id,
-                            "Question": crit_question,
-                            "Scoring Method": scoring_method
-                        })
-                    
-                    # Display as table
-                    st.dataframe(pd.DataFrame(criteria_data), use_container_width=True)
-                else:
-                    st.info(f"No criteria defined for {dim_name}")
-    
-    with structure_tabs[1]:
-        # Create a table view of all criteria
-        all_criteria = []
-        
-        for dimension in framework.get("dimensions", []):
-            dim_name = dimension.get("name", "")
-            dim_id = dimension.get("id", "")
-            
-            for criterion in dimension.get("criteria", []):
-                crit_name = criterion.get("name", "")
-                crit_id = criterion.get("id", "")
-                crit_question = criterion.get("question", "")
-                
-                all_criteria.append({
-                    "Dimension": dim_name,
-                    "Dimension ID": dim_id,
-                    "Criterion": crit_name,
-                    "Criterion ID": crit_id,
-                    "Question": crit_question
-                })
-        
-        if all_criteria:
-            # Display as searchable table
-            st.dataframe(pd.DataFrame(all_criteria), use_container_width=True)
         else:
-            st.info("No criteria found in this framework.")
+            st.error("Failed to find selected framework file")
+            return None
+    
+    with col2:
+        if st.button("Create New Framework", key="create_framework_btn"):
+            st.session_state.current_page = "02_Framework_Builder"
+            st.rerun()
+    
+    # Display framework info if available
+    if hasattr(st.session_state, "framework"):
+        framework = st.session_state.framework
+        
+        # Count dimensions and criteria
+        dimension_count = len(framework.get("dimensions", []))
+        criteria_count = sum(len(dimension.get("criteria", [])) for dimension in framework.get("dimensions", []))
+        
+        # Create metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Dimensions", dimension_count)
+        with col2:
+            st.metric("Criteria", criteria_count)
+        with col3:
+            st.metric("Framework ID", framework.get("id", "unknown"))
+        
+        # Display framework description if available
+        description = framework.get("description")
+        if description:
+            st.markdown(f"**Description:** {description}")
+        
+        # Display framework structure preview
+        if st.checkbox("Explore Framework Structure", key="explore_framework"):
+            st.markdown("### Framework Structure")
+            
+            # Display dimensions and criteria
+            for i, dimension in enumerate(framework.get("dimensions", [])):
+                dim_name = dimension.get("name", f"Dimension {i+1}")
+                with st.expander(dim_name, expanded=False):
+                    # Display dimension description
+                    description = dimension.get("description", "")
+                    if description:
+                        st.markdown(f"*{description}*")
+                    
+                    # Display criteria
+                    criteria = dimension.get("criteria", [])
+                    if criteria:
+                        for criterion in criteria:
+                            crit_name = criterion.get("name", "")
+                            crit_question = criterion.get("question", "")
+                            st.markdown(f"**{crit_name}**: {crit_question}")
+                    else:
+                        st.info(f"No criteria defined for {dim_name}")
+    
+    return framework if hasattr(st.session_state, "framework") else None
 
 def display_document_upload():
     """
@@ -608,101 +626,104 @@ def display_document_upload():
     """
     uploaded_document = None
     
-    with ui_components.card_container("Document Upload"):
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Upload a document to assess", 
+        type=["txt", "md", "rst", "csv", "json"],
+        key="document_uploader",
+        help="Select a document file to upload for assessment"
+    )
+    
+    # Check if a file was uploaded
+    if uploaded_file is not None:
+        # Process the file
+        try:
+            uploaded_document = Document.from_uploaded_file(uploaded_file)
+            st.session_state.document = uploaded_document
+            st.success(f"Document uploaded successfully: {uploaded_file.name}")
+        except Exception as e:
+            st.error(f"Failed to process document: {str(e)}")
+    
+    # Alternative: text input
+    if not uploaded_file:
+        st.markdown("#### Or paste document text")
+        
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            # File uploader
-            uploaded_file = st.file_uploader(
-                "Upload a document to assess", 
-                type=["txt", "md", "rst", "csv", "json"],
-                key="document_uploader"
+            document_text = st.text_area(
+                "Paste document text here",
+                height=150,
+                key="document_text",
+                help="Paste the document text to assess"
             )
             
-            # Check if a file was uploaded
-            if uploaded_file is not None:
-                # Process the file
+            if document_text:
                 try:
-                    uploaded_document = Document.from_uploaded_file(uploaded_file)
+                    filename = "pasted_document.txt"
+                    if "paste_filename" in st.session_state:
+                        filename = st.session_state.paste_filename
+                        
+                    uploaded_document = Document.from_text(document_text, filename=filename)
                     st.session_state.document = uploaded_document
-                    st.success(f"Document uploaded successfully: {uploaded_file.name}")
+                    st.success(f"Document text processed successfully")
                 except Exception as e:
-                    st.error(f"Failed to process document: {str(e)}")
-            
-            # Alternative: text input
-            if not uploaded_file:
-                st.markdown("#### Or paste document text")
-                document_text = st.text_area(
-                    "Paste document text here",
-                    height=150,
-                    key="document_text",
-                    help="Paste the document text to assess"
-                )
-                
-                if document_text:
-                    try:
-                        filename = "pasted_document.txt"
-                        if "paste_filename" in st.session_state:
-                            filename = st.session_state.paste_filename
-                            
-                        uploaded_document = Document.from_text(document_text, filename=filename)
-                        st.session_state.document = uploaded_document
-                    except Exception as e:
-                        st.error(f"Failed to process document text: {str(e)}")
+                    st.error(f"Failed to process document text: {str(e)}")
         
         with col2:
             # Document name field for pasted text
-            paste_filename = st.text_input(
+            st.text_input(
                 "Document Name (for pasted text)",
                 value="document.txt",
                 key="paste_filename",
                 help="Enter a name for the pasted document"
             )
-        
-        # Display document info if available
-        if hasattr(st.session_state, "document") and st.session_state.document is not None:
-            document = st.session_state.document
-            summary = document.get_summary()
-            
-            # Create metrics
-            metrics = [
-                {"label": "Words", "value": summary.get("word_count", 0)},
-                {"label": "Characters", "value": summary.get("character_count", 0)},
-                {"label": "Est. Tokens", "value": summary.get("estimated_tokens", 0)}
-            ]
-            
-            ui_components.metric_row(metrics)
-            
-            # Display document preview with tabs
-            preview_tabs = st.tabs(["Text Preview", "Document Analysis"])
-            
-            with preview_tabs[0]:
-                # Text preview
-                preview_length = min(len(document.text), 2000)
-                preview_text = document.text[:preview_length]
-                if len(document.text) > preview_length:
-                    preview_text += "..."
-                    
-                st.code(preview_text, language=None)
-            
-            with preview_tabs[1]:
-                # Document analysis
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**Document Type:** " + summary.get("document_type", "Unknown"))
-                    st.markdown("**Content Structure:** " + summary.get("content_structure", "General text"))
-                
-                with col2:
-                    st.markdown("**Entity Type:** " + summary.get("primary_entity", {}).get("type", "Unknown"))
-                    st.markdown("**Entity Name:** " + summary.get("primary_entity", {}).get("name", "Unknown"))
-                
-                # Show keywords if available
-                keywords = summary.get("keywords", [])
-                if keywords:
-                    st.markdown("**Keywords:** " + ", ".join(keywords))
     
-    ui_components.end_card_container()
+    # Display document info if available
+    if hasattr(st.session_state, "document") and st.session_state.document is not None:
+        document = st.session_state.document
+        summary = document.get_summary()
+        
+        st.markdown("### Document Information")
+        
+        # Create metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Words", summary.get("word_count", 0))
+        with col2:
+            st.metric("Characters", summary.get("character_count", 0))
+        with col3:
+            st.metric("Est. Tokens", summary.get("estimated_tokens", 0))
+        
+        # Display document preview with tabs
+        preview_tabs = st.tabs(["Text Preview", "Document Analysis"])
+        
+        with preview_tabs[0]:
+            # Text preview
+            preview_length = min(len(document.text), 2000)
+            preview_text = document.text[:preview_length]
+            if len(document.text) > preview_length:
+                preview_text += "..."
+                
+            st.code(preview_text, language=None)
+        
+        with preview_tabs[1]:
+            # Document analysis
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Document Type:** " + summary.get("document_type", "Unknown"))
+                st.markdown("**Content Structure:** " + summary.get("content_structure", "General text"))
+            
+            with col2:
+                st.markdown("**Entity Type:** " + summary.get("primary_entity", {}).get("type", "Unknown"))
+                st.markdown("**Entity Name:** " + summary.get("primary_entity", {}).get("name", "Unknown"))
+            
+            # Show keywords if available
+            keywords = summary.get("keywords", [])
+            if keywords:
+                st.markdown("**Keywords:** " + ", ".join(keywords))
+    
     return uploaded_document
 
 def display_assessment_options():
@@ -714,256 +735,252 @@ def display_assessment_options():
     """
     options = {}
     
-    with ui_components.card_container("Assessment Options"):
-        # Create tabs for option categories
-        option_tabs = st.tabs(["Model & Output", "Evidence Options", "Advanced Options"])
-        
-        with option_tabs[0]:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Model options
-                model_options = ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"]
-                default_index = 0
-                if hasattr(st.session_state, "model") and st.session_state.model in model_options:
-                    default_index = model_options.index(st.session_state.model)
-                
-                selected_model = st.selectbox(
-                    "Language Model",
-                    options=model_options,
-                    index=default_index,
-                    key="model_selector",
-                    help="Select the language model to use for assessment"
-                )
-                
-                # Store selection in session state
-                st.session_state.model = selected_model
-                options["model"] = selected_model
-                
-                # Report type
-                report_type = st.selectbox(
-                    "Report Type",
-                    options=["scorecard", "comprehensive", "detailed", "executive"],
-                    index=0,
-                    key="report_type",
-                    help="Select the type of report to generate"
-                )
-                options["report_type"] = report_type
-            
-            with col2:
-                # Assessment type options
-                include_evidence = st.checkbox(
-                    "Include Evidence", 
-                    value=True, 
-                    key="include_evidence",
-                    help="Include evidence references in the assessment"
-                )
-                options["include_evidence"] = include_evidence
-                
-                include_confidence = st.checkbox(
-                    "Include Confidence Scores", 
-                    value=True, 
-                    key="include_confidence",
-                    help="Include confidence scores in the assessment"
-                )
-                options["include_confidence"] = include_confidence
-                
-                # Inference option
-                infer_missing = st.checkbox(
-                    "Infer Missing Assessments", 
-                    value=True, 
-                    key="infer_missing",
-                    help="Attempt to assess criteria even without direct evidence"
-                )
-                options["infer_missing"] = infer_missing
-                
-                # Assessment reliability labeling
-                show_assessment_types = st.checkbox(
-                    "Show Assessment Types", 
-                    value=True, 
-                    key="show_assessment_types",
-                    help="Clearly label direct vs. inferred assessments"
-                )
-                options["include_assessment_types"] = show_assessment_types
-        
-        with option_tabs[1]:
-            # Evidence extraction options
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Extraction strategy options
-                extraction_strategy = st.selectbox(
-                    "Extraction Strategy",
-                    options=["semantic", "balanced", "detailed", "efficient"],
-                    index=0,
-                    key="extraction_strategy",
-                    help="Select the evidence extraction strategy"
-                )
-                options["extraction_strategy"] = extraction_strategy
-                
-                # Evidence thresholds
-                confidence_threshold = st.slider(
-                    "Evidence Confidence Threshold",
-                    min_value=0.0,
-                    max_value=1.0,
-                    value=0.3,
-                    step=0.05,
-                    key="confidence_threshold",
-                    help="Minimum confidence level for evidence"
-                )
-                options["confidence_threshold"] = confidence_threshold
-            
-            with col2:
-                # Evidence categorization
-                st.markdown("**Evidence Categorization**")
-                
-                relevance_levels = st.multiselect(
-                    "Relevance Levels",
-                    options=["Direct", "Indirect", "Contextual", "Implied"],
-                    default=["Direct", "Indirect", "Contextual"],
-                    key="relevance_levels",
-                    help="Types of evidence relevance to collect"
-                )
-                options["relevance_levels"] = relevance_levels
-                
-                sentiment_types = st.multiselect(
-                    "Sentiment Types",
-                    options=["Positive", "Negative", "Neutral"],
-                    default=["Positive", "Negative", "Neutral"],
-                    key="sentiment_types",
-                    help="Types of evidence sentiment to collect"
-                )
-                options["sentiment_types"] = sentiment_types
-        
-        with option_tabs[2]:
-            # Advanced options
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Parallel processing options
-                max_concurrent = st.slider(
-                    "Max Concurrent Extractors",
-                    min_value=1,
-                    max_value=5,
-                    value=3,
-                    step=1,
-                    help="Maximum number of extractors to run in parallel"
-                )
-                options["max_concurrent"] = max_concurrent
-                
-                # Combined evaluation option
-                use_combined_evaluation = st.checkbox(
-                    "Use Combined Evaluation", 
-                    value=True, 
-                    key="use_combined_evaluation",
-                    help="Evaluate related criteria together for consistency"
-                )
-                options["use_combined_evaluation"] = use_combined_evaluation
-            
-            with col2:
-                # Chunking options
-                chunking_method = st.selectbox(
-                    "Chunking Method",
-                    options=["auto", "fixed_size", "paragraph", "semantic"],
-                    index=0,
-                    key="chunking_method",
-                    help="Method for dividing the document into chunks"
-                )
-                options["chunking_method"] = chunking_method
-                
-                if chunking_method == "fixed_size":
-                    chunk_size = st.slider(
-                        "Chunk Size",
-                        min_value=1000,
-                        max_value=15000,
-                        value=8000,
-                        step=1000,
-                        help="Size of each document chunk in characters"
-                    )
-                    options["chunk_size"] = chunk_size
-                elif chunking_method == "semantic":
-                    semantic_overlap = st.slider(
-                        "Semantic Overlap",
-                        min_value=0.0,
-                        max_value=0.5,
-                        value=0.1,
-                        step=0.05,
-                        help="Semantic overlap between chunks"
-                    )
-                    options["semantic_overlap"] = semantic_overlap
+    # Create tabs for option categories
+    option_tabs = st.tabs(["Model & Output", "Evidence Options", "Advanced Options"])
     
-    ui_components.end_card_container()
+    with option_tabs[0]:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Model options
+            model_options = ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"]
+            default_index = 0
+            if hasattr(st.session_state, "model") and st.session_state.model in model_options:
+                default_index = model_options.index(st.session_state.model)
+            
+            selected_model = st.selectbox(
+                "Language Model",
+                options=model_options,
+                index=default_index,
+                key="model_selector",
+                help="Select the language model to use for assessment"
+            )
+            
+            # Store selection in session state
+            st.session_state.model = selected_model
+            options["model"] = selected_model
+            
+            # Report type
+            report_type = st.selectbox(
+                "Report Type",
+                options=["scorecard", "comprehensive", "detailed", "executive"],
+                index=0,
+                key="report_type",
+                help="Select the type of report to generate"
+            )
+            options["report_type"] = report_type
+        
+        with col2:
+            # Assessment type options
+            include_evidence = st.checkbox(
+                "Include Evidence", 
+                value=True, 
+                key="include_evidence",
+                help="Include evidence references in the assessment"
+            )
+            options["include_evidence"] = include_evidence
+            
+            include_confidence = st.checkbox(
+                "Include Confidence Scores", 
+                value=True, 
+                key="include_confidence",
+                help="Include confidence scores in the assessment"
+            )
+            options["include_confidence"] = include_confidence
+            
+            # Inference option
+            infer_missing = st.checkbox(
+                "Infer Missing Assessments", 
+                value=True, 
+                key="infer_missing",
+                help="Attempt to assess criteria even without direct evidence"
+            )
+            options["infer_missing"] = infer_missing
+            
+            # Assessment reliability labeling
+            show_assessment_types = st.checkbox(
+                "Show Assessment Types", 
+                value=True, 
+                key="show_assessment_types",
+                help="Clearly label direct vs. inferred assessments"
+            )
+            options["include_assessment_types"] = show_assessment_types
+    
+    with option_tabs[1]:
+        # Evidence extraction options
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Extraction strategy options
+            extraction_strategy = st.selectbox(
+                "Extraction Strategy",
+                options=["semantic", "balanced", "detailed", "efficient"],
+                index=0,
+                key="extraction_strategy",
+                help="Select the evidence extraction strategy"
+            )
+            options["extraction_strategy"] = extraction_strategy
+            
+            # Evidence thresholds
+            confidence_threshold = st.slider(
+                "Evidence Confidence Threshold",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.3,
+                step=0.05,
+                key="confidence_threshold",
+                help="Minimum confidence level for evidence"
+            )
+            options["confidence_threshold"] = confidence_threshold
+        
+        with col2:
+            # Evidence categorization
+            st.markdown("**Evidence Categorization**")
+            
+            relevance_levels = st.multiselect(
+                "Relevance Levels",
+                options=["Direct", "Indirect", "Contextual", "Implied"],
+                default=["Direct", "Indirect", "Contextual"],
+                key="relevance_levels",
+                help="Types of evidence relevance to collect"
+            )
+            options["relevance_levels"] = relevance_levels
+            
+            sentiment_types = st.multiselect(
+                "Sentiment Types",
+                options=["Positive", "Negative", "Neutral"],
+                default=["Positive", "Negative", "Neutral"],
+                key="sentiment_types",
+                help="Types of evidence sentiment to collect"
+            )
+            options["sentiment_types"] = sentiment_types
+    
+    with option_tabs[2]:
+        # Advanced options
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Parallel processing options
+            max_concurrent = st.slider(
+                "Max Concurrent Extractors",
+                min_value=1,
+                max_value=5,
+                value=3,
+                step=1,
+                help="Maximum number of extractors to run in parallel"
+            )
+            options["max_concurrent"] = max_concurrent
+            
+            # Combined evaluation option
+            use_combined_evaluation = st.checkbox(
+                "Use Combined Evaluation", 
+                value=True, 
+                key="use_combined_evaluation",
+                help="Evaluate related criteria together for consistency"
+            )
+            options["use_combined_evaluation"] = use_combined_evaluation
+        
+        with col2:
+            # Chunking options
+            chunking_method = st.selectbox(
+                "Chunking Method",
+                options=["auto", "fixed_size", "paragraph", "semantic"],
+                index=0,
+                key="chunking_method",
+                help="Method for dividing the document into chunks"
+            )
+            options["chunking_method"] = chunking_method
+            
+            if chunking_method == "fixed_size":
+                chunk_size = st.slider(
+                    "Chunk Size",
+                    min_value=1000,
+                    max_value=15000,
+                    value=8000,
+                    step=1000,
+                    help="Size of each document chunk in characters"
+                )
+                options["chunk_size"] = chunk_size
+            elif chunking_method == "semantic":
+                semantic_overlap = st.slider(
+                    "Semantic Overlap",
+                    min_value=0.0,
+                    max_value=0.5,
+                    value=0.1,
+                    step=0.05,
+                    help="Semantic overlap between chunks"
+                )
+                options["semantic_overlap"] = semantic_overlap
+    
     return options
 
 def display_previous_assessments():
     """Display previous assessment results that the user can reload."""
-    with ui_components.card_container("Previous Assessments"):
-        # List assessment output files
-        assessment_files = path_utils.list_files("outputs", ".json")
-        
-        if not assessment_files:
-            st.info("No previous assessments found.")
-            ui_components.end_card_container()
-            return
-        
-        # Sort by modification time (newest first)
-        assessment_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-        
-        # Create a table of assessments
-        data = []
-        for file_path in assessment_files[:10]:  # Show the 10 most recent
-            try:
-                # Get file info
-                mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
-                file_size = file_path.stat().st_size / 1024  # Size in KB
-                
-                data.append({
-                    "File": file_path.name,
-                    "Date": mtime.strftime("%Y-%m-%d %H:%M"),
-                    "Size": f"{file_size:.1f} KB",
-                    "Path": file_path
-                })
-            except Exception as e:
-                st.warning(f"Failed to load assessment {file_path.name}: {str(e)}")
-        
-        # Display as a table
-        if data:
-            # Create a dataframe for display
-            df = pd.DataFrame(data)
-            # Drop the Path column for display
-            display_df = df.drop(columns=["Path"])
-            
-            # Show the table
-            st.dataframe(display_df, use_container_width=True)
-            
-            # Add a load button
-            cols = st.columns([3, 1])
-            
-            with cols[0]:
-                selected_indices = st.selectbox(
-                    "Select assessment to load",
-                    options=range(len(data)),
-                    format_func=lambda i: f"{data[i]['File']} - {data[i]['Date']}",
-                    key="assessment_selector"
-                )
-            
-            with cols[1]:
-                if st.button("Load Assessment", key="load_assessment_btn"):
-                    selected_path = data[selected_indices]["Path"]
-                    try:
-                        # Load the selected assessment
-                        with open(selected_path, "r") as f:
-                            assessment_result = json.load(f)
-                        
-                        # Store in session state
-                        st.session_state.assessment_result = assessment_result
-                        
-                        st.success(f"Loaded assessment: {selected_path.name}")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Failed to load assessment: {str(e)}")
+    st.markdown("### Previous Assessments")
     
-    ui_components.end_card_container()
+    # List assessment output files
+    assessment_files = path_utils.list_files("outputs", ".json")
+    
+    if not assessment_files:
+        st.info("No previous assessments found.")
+        return
+    
+    # Sort by modification time (newest first)
+    assessment_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    
+    # Create a table of assessments
+    data = []
+    for file_path in assessment_files[:10]:  # Show the 10 most recent
+        try:
+            # Get file info
+            mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+            file_size = file_path.stat().st_size / 1024  # Size in KB
+            
+            data.append({
+                "File": file_path.name,
+                "Date": mtime.strftime("%Y-%m-%d %H:%M"),
+                "Size": f"{file_size:.1f} KB",
+                "Path": file_path
+            })
+        except Exception as e:
+            st.warning(f"Failed to load assessment {file_path.name}: {str(e)}")
+    
+    # Display as a table
+    if data:
+        # Create a dataframe for display
+        df = pd.DataFrame(data)
+        # Drop the Path column for display
+        display_df = df.drop(columns=["Path"])
+        
+        # Show the table
+        st.dataframe(display_df, use_container_width=True)
+        
+        # Add a load button
+        cols = st.columns([3, 1])
+        
+        with cols[0]:
+            selected_indices = st.selectbox(
+                "Select assessment to load",
+                options=range(len(data)),
+                format_func=lambda i: f"{data[i]['File']} - {data[i]['Date']}",
+                key="assessment_selector"
+            )
+        
+        with cols[1]:
+            if st.button("Load Assessment", key="load_assessment_btn"):
+                selected_path = data[selected_indices]["Path"]
+                try:
+                    # Load the selected assessment
+                    with open(selected_path, "r") as f:
+                        assessment_result = json.load(f)
+                    
+                    # Store in session state
+                    st.session_state.assessment_result = assessment_result
+                    
+                    st.success(f"Loaded assessment: {selected_path.name}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to load assessment: {str(e)}")
 
 def initialize_session_state():
     """Initialize session state for the assessment page."""
