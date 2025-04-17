@@ -1,15 +1,14 @@
 """
-Enhanced Meta Planner Agent - Designs assessment strategies and defines output schema
+Updated Meta Planner Agent - Creates strategies optimized for the streamlined evidence packet approach
 
-This module provides the MetaPlannerAgent class, which analyzes documents and 
-frameworks to design custom processing strategies for assessment, including
-parallel extraction capabilities and output schema definition.
+This agent analyzes documents and frameworks to design simple but effective strategies
+for extracting consolidated evidence packets and performing consistent evaluations.
 """
 
 import json
-import time
 import logging
-import re
+import time
+import uuid
 from typing import Dict, Any, List, Optional, Tuple, Set
 
 from core.agents.base import BaseAgent
@@ -17,22 +16,15 @@ from core.context import AssessmentContext
 
 class MetaPlannerAgent(BaseAgent):
     """
-    Designs custom assessment strategies and output schemas based on document and framework analysis.
+    Designs assessment strategies optimized for the streamlined evidence packet approach.
     
     The Meta Planner is responsible for:
-    1. Analyzing document content and structure
-    2. Evaluating framework dimensions and criteria
-    3. Designing an optimal processing strategy
-    4. Configuring agent deployment and sequencing
-    5. Creating custom instructions for each agent
-    6. Grouping criteria for parallel extraction
-    7. Defining the output schema for structured assessment results
-    
-    This is the strategic "brain" of the assessment system.
+    1. Analyzing document content and framework structure
+    2. Creating clear instructions for extractors to produce consolidated evidence packets
+    3. Identifying related criteria for potential combined evaluation
+    4. Configuring the evaluator for optimal assessment consistency
+    5. Creating simple, LLM-friendly prompts throughout the process
     """
-    
-    DEFAULT_MAX_GROUP_SIZE = 3
-    DEFAULT_TOKEN_THRESHOLD = 10000
     
     def __init__(
         self,
@@ -52,57 +44,50 @@ class MetaPlannerAgent(BaseAgent):
         """
         super().__init__(name, "planner", llm, context, options or {})
         
-        # Extract configuration options
-        self.max_group_size = self.options.get("max_group_size", self.DEFAULT_MAX_GROUP_SIZE)
-        self.token_threshold = self.options.get("token_threshold", self.DEFAULT_TOKEN_THRESHOLD)
-        self.one_criterion_per_extractor = self.options.get("one_criterion_per_extractor", True)
+        # Get planner options with defaults
+        self.options = options or {}
+        self.max_concurrent = self.options.get("max_concurrent", 3)
         
-        self.logger.info(f"{name} initialized with max_group_size={self.max_group_size}")
+        # Settings for the two-pass evidence packet approach
+        self.use_combined_evaluation = self.options.get("use_combined_evaluation", True)
+        self.max_criteria_per_group = self.options.get("max_criteria_per_group", 3)
         
-    async def process(self, document_preview_length: int = 5000) -> Dict[str, Any]:
+        self.logger.info(f"{name} initialized with combined_evaluation={self.use_combined_evaluation}")
+        
+    async def process(self) -> Dict[str, Any]:
         """
         Analyze document and framework to design an assessment strategy.
         
-        Args:
-            document_preview_length: Length of document preview to analyze
-            
         Returns:
-            Assessment strategy
+            Assessment strategy dictionary
         """
         self.logger.info("Starting assessment strategy planning")
         self.start_timer()
         
         try:
-            # 1. Extract document preview
+            # Get document preview for analysis
+            document_preview_length = 5000
             document_preview = self._get_document_preview(document_preview_length)
             
-            # 2. Analyze document preview
+            # Analyze document structure and content
             document_analysis = await self._analyze_document(document_preview)
             
-            # 3. Analyze framework
+            # Analyze framework complexity and evidence requirements
             framework_analysis = self._analyze_framework()
             
-            # 4. Design assessment strategy
+            # Design assessment strategy
             assessment_strategy = await self._design_strategy(document_analysis, framework_analysis)
             
-            # 5. Define output schema
+            # Define output schema
             output_schema = self._define_output_schema(framework_analysis)
             assessment_strategy["output_schema"] = output_schema
-            
-            # 6. Store strategy in context
-            self.context.set_planning_data(assessment_strategy)
             
             # Record processing time
             elapsed_time = self.stop_timer()
             self.logger.info(f"Assessment strategy planning completed in {elapsed_time:.2f}s")
             
-            # Record observation
-            self.record_observation("strategy_created", {
-                "strategy_type": assessment_strategy.get("strategy_type"),
-                "agent_count": len(assessment_strategy.get("agents", [])),
-                "time_taken": elapsed_time,
-                "output_schema_defined": True
-            })
+            # Record observation with strategy
+            self.record_observation("strategy_created", assessment_strategy)
             
             return assessment_strategy
             
@@ -110,7 +95,10 @@ class MetaPlannerAgent(BaseAgent):
             self.stop_timer()
             self.logger.error(f"Error during assessment strategy planning: {str(e)}", exc_info=True)
             self.add_warning(f"Failed to create assessment strategy: {str(e)}")
-            raise
+            
+            # Create fallback strategy
+            fallback_strategy = self._create_fallback_strategy()
+            return fallback_strategy
     
     def _get_document_preview(self, max_length: int = 5000) -> str:
         """
@@ -123,19 +111,14 @@ class MetaPlannerAgent(BaseAgent):
             Document preview text
         """
         document_text = self.context.document_text
+        
+        # Get document length for logging
+        document_length = len(document_text)
+        
+        # Limit preview length
         preview = document_text[:max_length]
         
-        # Record observation
-        self.record_observation("document_preview", {
-            "preview_length": len(preview),
-            "document_length": len(document_text),
-            "preview_ratio": len(preview) / max(1, len(document_text))
-        })
-        
-        # Track tokens
-        preview_tokens = self.estimate_tokens(preview)
-        self.track_tokens(preview_tokens, "prompt", "document_preview")
-        
+        self.logger.info(f"Created document preview ({len(preview)} chars) from {document_length} total chars")
         return preview
     
     def _analyze_framework(self) -> Dict[str, Any]:
@@ -155,11 +138,9 @@ class MetaPlannerAgent(BaseAgent):
         dimensions = framework.get("dimensions", [])
         dimension_count = len(dimensions)
         
-        criteria_counts = {}
-        total_criteria = 0
-        
         # Collect detailed dimension and criteria information
         dimensions_info = []
+        total_criteria = 0
         
         for dimension in dimensions:
             dimension_id = dimension.get("id", "")
@@ -170,8 +151,6 @@ class MetaPlannerAgent(BaseAgent):
                 
             criteria = dimension.get("criteria", [])
             criteria_count = len(criteria)
-            
-            criteria_counts[dimension_id] = criteria_count
             total_criteria += criteria_count
             
             # Collect criteria details
@@ -179,14 +158,18 @@ class MetaPlannerAgent(BaseAgent):
             for criterion in criteria:
                 criterion_id = criterion.get("id", "")
                 criterion_name = criterion.get("name", "")
+                criterion_question = criterion.get("question", "")
                 scoring_method = criterion.get("scoring_method", "scale_1_5")
                 
-                criteria_info.append({
+                criterion_data = {
                     "id": criterion_id,
                     "name": criterion_name,
+                    "question": criterion_question,
                     "scoring_method": scoring_method,
                     "scoring_definitions": criterion.get("scoring_definitions", {})
-                })
+                }
+                
+                criteria_info.append(criterion_data)
             
             dimensions_info.append({
                 "id": dimension_id,
@@ -195,11 +178,7 @@ class MetaPlannerAgent(BaseAgent):
                 "criteria": criteria_info
             })
         
-        # Get rating scale if available
-        rating_scale = framework.get("rating_scale", {})
-        rating_levels = rating_scale.get("levels", [])
-        
-        # Get scoring methods
+        # Analyze scoring methods
         scoring_methods = framework.get("scoring_methods", {})
         
         # Create framework analysis
@@ -208,15 +187,14 @@ class MetaPlannerAgent(BaseAgent):
             "framework_name": framework_name,
             "dimension_count": dimension_count,
             "total_criteria": total_criteria,
-            "criteria_by_dimension": criteria_counts,
-            "has_rating_scale": bool(rating_levels),
-            "rating_levels_count": len(rating_levels),
             "scoring_methods": scoring_methods,
             "dimensions": dimensions_info
         }
         
-        # Record observation
-        self.record_observation("framework_analysis", framework_analysis)
+        self.logger.info(
+            f"Analyzed framework: {framework_name} with {dimension_count} dimensions, "
+            f"{total_criteria} total criteria"
+        )
         
         return framework_analysis
     
@@ -232,184 +210,57 @@ class MetaPlannerAgent(BaseAgent):
         """
         self.logger.info("Analyzing document preview")
         
-        # Create prompt for document analysis
-        system_prompt = """You are an expert document analyst tasked with analyzing a document preview to understand its content, structure, and characteristics. Your analysis will be used to design an optimal assessment strategy."""
+        # Get document properties from context if available
+        if hasattr(self.context, "document_properties"):
+            document_properties = self.context.document_properties
+            
+            # If we have comprehensive properties, use them
+            if document_properties.get("document_type") != "unknown":
+                self.logger.info(f"Using existing document properties: {document_properties}")
+                return document_properties
         
-        human_prompt = f"""Analyze the following document preview and provide a structured assessment of its characteristics.
+        # Create prompt for document analysis
+        system_prompt = """You are an expert document analyst tasked with analyzing a document preview to understand its content, structure, and characteristics for efficient processing."""
+        
+        human_prompt = f"""Analyze the following document preview to identify its characteristics for assessment planning.
 
 DOCUMENT PREVIEW:
 {document_preview}
 
-Please provide your analysis in the following format:
-1. Document type (e.g., meeting transcript, technical report, etc.)
-2. Content structure (paragraphs, sections, dialogue, etc.)
-3. Key topics identified
+Please analyze this document for:
+1. Content type (e.g., meeting transcript, earnings call, technical report, etc.)
+2. Structure (paragraphs, sections, dialogue, etc.)
+3. Key topics and themes
 4. Language characteristics (technical, conversational, formal, etc.)
-5. Special considerations for assessment
+5. Evidence potential - how likely the document contains assessable content
+6. Special processing considerations
 
-Your analysis should be concise but informative, focusing on aspects that would be relevant for designing an assessment strategy."""
+Provide your analysis as a structured JSON object."""
 
-        # Call LLM for analysis
-        response_text, _ = await self._safe_llm_call(
-            "generate_completion",
+        # Call LLM for analysis with structured output
+        result = await self._structured_output_call(
             prompt=human_prompt,
+            output_schema={
+                "type": "object",
+                "properties": {
+                    "document_type": {"type": "string"},
+                    "content_structure": {"type": "string"},
+                    "key_topics": {"type": "array", "items": {"type": "string"}},
+                    "language_characteristics": {"type": "array", "items": {"type": "string"}},
+                    "evidence_potential": {"type": "string"},
+                    "special_considerations": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["document_type", "content_structure"]
+            },
             system_prompt=system_prompt,
-            temperature=0.3,
-            max_tokens=1000
+            temperature=0.7
         )
         
-        # Parse analysis
-        document_analysis = self._parse_document_analysis(response_text)
+        # Record observation for analysis
+        self.record_observation("document_analysis", result)
         
-        # Record observation
-        self.record_observation("document_analysis", document_analysis)
-        
-        return document_analysis
-        
-    def _parse_document_analysis(self, analysis_text: str) -> Dict[str, Any]:
-        """
-        Parse document analysis text into structured format.
-        
-        Args:
-            analysis_text: Analysis text from LLM
-            
-        Returns:
-            Structured document analysis
-        """
-        # Default structure
-        document_analysis = {
-            "document_type": "unknown",
-            "content_structure": "unknown",
-            "key_topics": [],
-            "language_characteristics": [],
-            "special_considerations": []
-        }
-        
-        if not analysis_text:
-            self.add_warning("Received empty document analysis text")
-            return document_analysis
-        
-        analysis_text = analysis_text.lower()  # Convert to lowercase for case-insensitive matching
-        
-        # Extract document type
-        try:
-            if "document type" in analysis_text:
-                pattern = r"(?:document type[:\s]+)(.*?)(?:\n|$)"
-                match = re.search(pattern, analysis_text, re.IGNORECASE | re.DOTALL)
-                if match:
-                    document_analysis["document_type"] = match.group(1).strip()
-        except Exception as e:
-            self.logger.warning(f"Error extracting document type: {str(e)}")
-        
-        # Extract content structure
-        try:
-            if "content structure" in analysis_text:
-                pattern = r"(?:content structure[:\s]+)(.*?)(?:\n|$)"
-                match = re.search(pattern, analysis_text, re.IGNORECASE | re.DOTALL)
-                if match:
-                    document_analysis["content_structure"] = match.group(1).strip()
-        except Exception as e:
-            self.logger.warning(f"Error extracting content structure: {str(e)}")
-        
-        # Extract key topics
-        try:
-            if "key topics" in analysis_text:
-                topics = []
-                # Find the section starting with "key topics"
-                key_topics_match = re.search(r"key topics.*?(?:\n|$)(.*?)(?:language characteristics|special considerations|$)", 
-                                            analysis_text, re.IGNORECASE | re.DOTALL)
-                if key_topics_match:
-                    topics_section = key_topics_match.group(1).strip()
-                    # Extract bullet points or numbered items
-                    for line in topics_section.split('\n'):
-                        line = line.strip()
-                        if line and (line.startswith('-') or line.startswith('*') or re.match(r'^\d+\.', line)):
-                            topic = re.sub(r'^[-*\d.]+\s*', '', line).strip()
-                            if topic:
-                                topics.append(topic)
-                document_analysis["key_topics"] = topics
-        except Exception as e:
-            self.logger.warning(f"Error extracting key topics: {str(e)}")
-        
-        # Extract language characteristics
-        try:
-            if "language characteristics" in analysis_text:
-                characteristics = []
-                lang_match = re.search(r"language characteristics.*?(?:\n|$)(.*?)(?:special considerations|$)", 
-                                    analysis_text, re.IGNORECASE | re.DOTALL)
-                if lang_match:
-                    lang_section = lang_match.group(1).strip()
-                    for line in lang_section.split('\n'):
-                        line = line.strip()
-                        if line and (line.startswith('-') or line.startswith('*') or re.match(r'^\d+\.', line)):
-                            characteristic = re.sub(r'^[-*\d.]+\s*', '', line).strip()
-                            if characteristic:
-                                characteristics.append(characteristic)
-                document_analysis["language_characteristics"] = characteristics
-        except Exception as e:
-            self.logger.warning(f"Error extracting language characteristics: {str(e)}")
-        
-        # Extract special considerations
-        try:
-            if "special considerations" in analysis_text:
-                considerations = []
-                special_match = re.search(r"special considerations.*?(?:\n|$)(.*?)(?:$)", 
-                                        analysis_text, re.IGNORECASE | re.DOTALL)
-                if special_match:
-                    special_section = special_match.group(1).strip()
-                    for line in special_section.split('\n'):
-                        line = line.strip()
-                        if line and (line.startswith('-') or line.startswith('*') or re.match(r'^\d+\.', line)):
-                            consideration = re.sub(r'^[-*\d.]+\s*', '', line).strip()
-                            if consideration:
-                                considerations.append(consideration)
-                document_analysis["special_considerations"] = considerations
-        except Exception as e:
-            self.logger.warning(f"Error extracting special considerations: {str(e)}")
-        
-        # If we failed to extract anything, try a more general approach
-        if (not document_analysis["document_type"] or 
-            document_analysis["document_type"] == "unknown" or
-            not document_analysis["key_topics"]):
-            
-            self.logger.warning("Standard parsing failed, attempting fallback extraction")
-            
-            # Fallback to more general extraction
-            try:
-                # Look for patterns that might indicate document type
-                doc_type_patterns = [
-                    r"(?:this (?:is|appears to be)(?: a)?) ([\w\s]+document)",
-                    r"(?:this (?:is|appears to be)(?: a)?) ([\w\s]+report)",
-                    r"(?:this (?:is|appears to be)(?: a)?) ([\w\s]+text)",
-                ]
-                
-                for pattern in doc_type_patterns:
-                    match = re.search(pattern, analysis_text, re.IGNORECASE)
-                    if match and document_analysis["document_type"] == "unknown":
-                        document_analysis["document_type"] = match.group(1).strip()
-                        break
-                
-                # Extract topics by looking for lists or key phrases
-                if not document_analysis["key_topics"]:
-                    # Extract any bullet points or numbered lists
-                    list_items = re.findall(r'(?:^|\n)\s*[-*•]+(.*?)(?:\n|$)', analysis_text)
-                    if list_items:
-                        document_analysis["key_topics"] = [item.strip() for item in list_items if item.strip()]
-            except Exception as e:
-                self.logger.warning(f"Fallback extraction also failed: {str(e)}")
-        
-        # Ensure we have at least something in key fields
-        if not document_analysis["document_type"] or document_analysis["document_type"] == "unknown":
-            document_analysis["document_type"] = "text document"
-        
-        if not document_analysis["key_topics"]:
-            # Extract potential topics from the first few sentences
-            sentences = re.split(r'[.!?]+', analysis_text)
-            if len(sentences) > 2:
-                document_analysis["key_topics"] = ["General content analysis"]
-        
-        self.logger.info(f"Document analysis parsing complete. Type: {document_analysis['document_type']}")
-        return document_analysis
+        self.logger.info(f"Document analysis complete: type={result.get('document_type')}")
+        return result
     
     async def _design_strategy(
         self, 
@@ -417,7 +268,7 @@ Your analysis should be concise but informative, focusing on aspects that would 
         framework_analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Design assessment strategy based on document and framework analysis.
+        Design assessment strategy optimized for consolidated evidence packets.
         
         Args:
             document_analysis: Document analysis results
@@ -426,261 +277,416 @@ Your analysis should be concise but informative, focusing on aspects that would 
         Returns:
             Assessment strategy
         """
-        self.logger.info("Designing assessment strategy")
+        self.logger.info("Designing assessment strategy for consolidated evidence packets")
         
-        # 1. Analyze document size and complexity
-        document_size = len(self.context.document_text)
-        document_tokens = self.estimate_tokens(self.context.document_text)
-        document_complexity = self._estimate_complexity(document_analysis)
+        # 1. Design chunking strategy based on document
+        chunking_strategy = self._design_chunking_strategy(document_analysis)
         
-        # 2. Determine optimal chunking strategy
-        chunking_strategy = self._design_chunking_strategy(document_size, document_analysis)
+        # 2. Get all criteria
+        all_criteria = self._get_all_criteria(framework_analysis)
         
-        # 3. Group criteria for extraction
-        if self.one_criterion_per_extractor:
-            # Create a group for each criterion (one criterion per extractor)
-            criteria_groups = self._group_criteria_one_per_extractor(framework_analysis)
-        else:
-            # Group criteria based on document size and complexity
-            criteria_groups = self._group_criteria(document_size, document_complexity)
+        # 3. Generate clear extraction instructions for each criterion
+        criteria_with_instructions = await self._generate_extraction_instructions(all_criteria, document_analysis)
         
-        # 4. Generate strategy with parallel extraction
-        strategy = await self._generate_parallel_strategy(
-            document_analysis, 
-            framework_analysis, 
-            criteria_groups,
-            chunking_strategy
+        # 4. Identify related criteria for combined evaluation
+        criteria_groups = []
+        if self.use_combined_evaluation:
+            criteria_groups = await self._identify_related_criteria(framework_analysis)
+        
+        # 5. Create extractor configurations (one per criterion)
+        extractor_agents = []
+        for criterion in criteria_with_instructions:
+            extractor_config = {
+                "agent_type": f"extractor_{criterion['criterion_id']}",
+                "configuration": {
+                    "criteria_ids": [criterion["criterion_id"]],
+                    "dimension_ids": [criterion["dimension_id"]]
+                },
+                "instructions": criterion["extraction_instructions"]
+            }
+            extractor_agents.append(extractor_config)
+        
+        # 6. Create evaluator configuration
+        evaluator_config = {
+            "agent_type": "evaluator",
+            "configuration": {
+                "evaluation_type": "consolidated_packet",
+                "use_combined_evaluation": self.use_combined_evaluation,
+                "criteria_groups": criteria_groups if criteria_groups else [],
+                "confidence_threshold": 0.4,
+                "infer_missing": True,
+                "output_format": "scorecard"
+            },
+            "instructions": self._create_evaluator_instructions(framework_analysis)
+        }
+        
+        # 7. Create reporter configuration
+        reporter_config = {
+            "agent_type": "reporter",
+            "configuration": {
+                "report_type": "scorecard",
+                "include_evidence": True,
+                "include_confidence": True,
+                "include_assessment_types": True,
+                "export_formats": ["json", "html", "markdown"]
+            },
+            "instructions": """Create a structured scorecard from the evaluations.
+Include evidence summaries and clearly distinguish between direct and inferred assessments."""
+        }
+        
+        # 8. Create processing sequence
+        extractor_steps = ["extractor"] * len(extractor_agents)
+        processing_sequence = extractor_steps + ["evaluator", "reporter"]
+        
+        # 9. Build the complete strategy
+        strategy = {
+            "strategy_type": "consolidated_evidence_packets",
+            "chunking_strategy": chunking_strategy,
+            "agents": extractor_agents + [evaluator_config, reporter_config],
+            "processing_sequence": processing_sequence,
+            "document_analysis": document_analysis,
+            "criteria_groups": criteria_groups,
+            "rationale": (
+                f"Strategy optimized for consolidated evidence packets with two-pass extraction. "
+                f"Each criterion gets one comprehensive evidence packet from all document chunks."
+            ),
+            "approach_description": (
+                "This strategy first extracts evidence from each chunk for every criterion, "
+                "then consolidates findings into one packet per criterion. The evaluator can "
+                f"{'perform combined evaluation for related criteria' if self.use_combined_evaluation else 'evaluate each criterion individually'} "
+                "to ensure consistency and completeness."
+            )
+        }
+        
+        # Report on strategy created
+        self.logger.info(
+            f"Created consolidated evidence packet strategy with {len(extractor_agents)} extractors "
+            f"for {len(all_criteria)} criteria"
         )
-        
-        # 5. Record strategy design observation
-        self.record_observation("strategy_design", {
-            "strategy_type": strategy.get("strategy_type"),
-            "chunking_method": strategy.get("chunking_strategy", {}).get("method"),
-            "agent_count": len(strategy.get("agents", [])),
-            "extraction_groups": len(criteria_groups)
-        })
         
         return strategy
     
-    def _estimate_complexity(self, document_analysis: Dict[str, Any]) -> str:
-        """
-        Estimate document complexity based on analysis.
-        
-        Args:
-            document_analysis: Document analysis results
-            
-        Returns:
-            Complexity level ("low", "medium", "high")
-        """
-        # Check language characteristics
-        language_chars = document_analysis.get("language_characteristics", [])
-        technical_terms = ["technical", "specialized", "jargon", "complex"]
-        technical_count = sum(1 for char in language_chars if any(term in char.lower() for term in technical_terms))
-        
-        # Check structure
-        structure = document_analysis.get("content_structure", "").lower()
-        structured_terms = ["section", "heading", "structured", "organized"]
-        is_structured = any(term in structure for term in structured_terms)
-        
-        # Check special considerations
-        special = document_analysis.get("special_considerations", [])
-        complex_terms = ["complex", "difficult", "challenging", "nuanced"]
-        complexity_mentions = sum(1 for s in special if any(term in s.lower() for term in complex_terms))
-        
-        # Determine complexity
-        if technical_count >= 2 or complexity_mentions >= 2:
-            return "high"
-        elif technical_count >= 1 or is_structured or complexity_mentions >= 1:
-            return "medium"
-        else:
-            return "low"
-    
-    def _design_chunking_strategy(
-        self, 
-        document_size: int, 
-        document_analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _design_chunking_strategy(self, document_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """
         Design optimal chunking strategy based on document.
         
+        For consolidated evidence packets, we can use larger chunks with more overlap.
+        
         Args:
-            document_size: Document size in characters
             document_analysis: Document analysis results
             
         Returns:
             Chunking strategy
         """
-        # Default configuration
-        strategy = {
-            "method": "fixed_size",
-            "size": 8000,
-            "overlap": 200,
-            "rationale": "Standard fixed-size chunking for general documents"
-        }
+        # Get document type and structure
+        document_type = document_analysis.get("document_type", "").lower()
+        structure = document_analysis.get("content_structure", "").lower()
+        document_text = self.context.document_text
+        document_size = len(document_text)
         
-        # Adjust based on document size
-        if document_size < 15000:
-            # Small document - use a single large chunk
-            strategy["method"] = "fixed_size"
-            strategy["size"] = document_size
-            strategy["overlap"] = 0
-            strategy["rationale"] = "Document is small enough to process as a single chunk"
-        else:
-            # Check document structure
-            structure = document_analysis.get("content_structure", "").lower()
+        # For earnings calls and transcripts, use larger chunks with speaker context
+        if "transcript" in document_type or "earnings call" in document_type or "dialogue" in structure:
+            return {
+                "method": "paragraph",
+                "size": 50,  # Large paragraph chunks
+                "overlap": 5,  # With overlap to maintain context
+                "rationale": "Using paragraph chunking to preserve speaker context in transcript/dialogue"
+            }
+        
+        # For small documents, use one large chunk
+        elif document_size < 30000:
+            return {
+                "method": "fixed_size",
+                "size": document_size,
+                "overlap": 0,
+                "rationale": "Small document processed as a single chunk"
+            }
             
-            if "dialogue" in structure or "transcript" in structure:
-                # Dialogue or transcript - use paragraph-based chunking
-                strategy["method"] = "paragraph"
-                strategy["size"] = 50  # Number of paragraphs per chunk
-                strategy["overlap"] = 5
-                strategy["rationale"] = "Dialogue-based content with natural paragraph breaks"
-            elif "section" in structure or "heading" in structure:
-                # Sectioned document - use section-based chunking
-                strategy["method"] = "semantic"
-                strategy["size"] = 10000
-                strategy["overlap"] = 500
-                strategy["rationale"] = "Document has clear section structure for semantic chunking"
-            else:
-                # Default to fixed size with size based on document length
-                chunk_size = min(10000, max(4000, document_size // 5))
-                strategy["method"] = "fixed_size"
-                strategy["size"] = chunk_size
-                strategy["overlap"] = chunk_size // 10
-                strategy["rationale"] = f"Standard chunking with size optimized for document length ({document_size} chars)"
-        
-        return strategy
+        # For medium documents, use substantial chunks with significant overlap
+        elif document_size < 100000:
+            chunk_size = min(15000, max(8000, document_size // 3))
+            return {
+                "method": "fixed_size",
+                "size": chunk_size,
+                "overlap": chunk_size // 4,  # 25% overlap
+                "rationale": f"Medium document chunked into larger segments with overlap for context preservation"
+            }
+            
+        # For large documents, use semantic chunking
+        else:
+            return {
+                "method": "semantic",
+                "rationale": "Large document using semantic chunking to maintain contextual meaning"
+            }
     
-    def _group_criteria_one_per_extractor(
-        self,
-        framework_analysis: Dict[str, Any]
-    ) -> List[List[Dict[str, Any]]]:
+    def _get_all_criteria(self, framework_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Group criteria with one criterion per group for maximum specialization.
+        Get list of all criteria with dimension info.
         
         Args:
             framework_analysis: Framework analysis results
             
         Returns:
-            List of criteria groups (one criterion per group)
+            List of all criteria
         """
-        criteria_groups = []
-        
-        for dimension in framework_analysis.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                criterion_name = criterion.get("name", "")
-                
-                if not criterion_id:
-                    continue
-                
-                # Create a group with just this one criterion
-                criteria_groups.append([{
-                    "dimension_id": dimension_id,
-                    "dimension_name": dimension_name,
-                    "criterion_id": criterion_id,
-                    "criterion_name": criterion_name,
-                    "scoring_method": criterion.get("scoring_method", "scale_1_5"),
-                    "scoring_definitions": criterion.get("scoring_definitions", {})
-                }])
-        
-        self.logger.info(f"Created {len(criteria_groups)} criteria groups (one criterion per extractor)")
-        return criteria_groups
-    
-    def _group_criteria(
-        self, 
-        document_size: int, 
-        document_complexity: str
-    ) -> List[List[Dict[str, Any]]]:
-        """
-        Group criteria for parallel extraction.
-        
-        Args:
-            document_size: Document size in characters
-            document_complexity: Document complexity level
-            
-        Returns:
-            List of criteria groups
-        """
-        framework = self.context.framework
-        
-        # Collect all criteria with dimension info
         all_criteria = []
         
-        for dimension in framework.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            if not dimension_id:
-                continue
-                
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                criterion_name = criterion.get("name", "")
-                
-                if not criterion_id:
-                    continue
-                    
+        for dimension in framework_analysis["dimensions"]:
+            for criterion in dimension["criteria"]:
                 all_criteria.append({
-                    "dimension_id": dimension_id,
-                    "dimension_name": dimension_name,
-                    "criterion_id": criterion_id,
-                    "criterion_name": criterion_name,
-                    "criterion_question": criterion.get("question", ""),
+                    "dimension_id": dimension["id"],
+                    "dimension_name": dimension["name"],
+                    "criterion_id": criterion["id"],
+                    "criterion_name": criterion["name"],
+                    "criterion_question": criterion["question"],
                     "scoring_method": criterion.get("scoring_method", "scale_1_5"),
                     "scoring_definitions": criterion.get("scoring_definitions", {})
                 })
         
-        # Determine grouping strategy based on document size and complexity
-        max_group_size = self.max_group_size
+        return all_criteria
+
+    async def _generate_extraction_instructions(
+        self, 
+        all_criteria: List[Dict[str, Any]],
+        document_analysis: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate clear extraction instructions for consolidated evidence packets.
         
-        if document_size < self.token_threshold:
-            # Small document - use one group for all criteria
-            return [all_criteria]
+        Args:
+            all_criteria: List of all criteria
+            document_analysis: Document analysis results
+            
+        Returns:
+            Criteria with added extraction instructions
+        """
+        self.logger.info(f"Generating evidence extraction instructions for {len(all_criteria)} criteria")
         
-        # For larger documents, group by dimension first, then split if needed
-        dimension_groups = {}
+        # Process criteria in batches to avoid token limits
+        max_batch_size = 5
+        batches = [all_criteria[i:i+max_batch_size] for i in range(0, len(all_criteria), max_batch_size)]
         
-        for criterion in all_criteria:
-            dimension_id = criterion.get("dimension_id")
-            if dimension_id not in dimension_groups:
-                dimension_groups[dimension_id] = []
-            dimension_groups[dimension_id].append(criterion)
+        criteria_with_instructions = []
         
-        # Create final groups
-        criterion_groups = []
+        # Document context for prompts
+        document_type = document_analysis.get("document_type", "document")
+        document_structure = document_analysis.get("content_structure", "")
         
-        for dimension_id, criteria in dimension_groups.items():
-            # If dimension has more than max criteria, split it
-            if len(criteria) > max_group_size:
-                for i in range(0, len(criteria), max_group_size):
-                    group = criteria[i:i + max_group_size]
-                    criterion_groups.append(group)
-            else:
-                criterion_groups.append(criteria)
+        # Entity information from context
+        entity_info = self.context.document_properties.get("primary_entity", {})
+        entity_name = entity_info.get("name", "the entity")
+        entity_type = entity_info.get("type", "organization")
         
-        # If we have too many small groups, consolidate
-        if document_complexity == "low" and len(criterion_groups) > 5:
-            consolidated_groups = []
+        for batch_idx, criteria_batch in enumerate(batches):
+            self.logger.info(f"Processing instructions batch {batch_idx+1}/{len(batches)}")
+            
+            # Create batch to send to LLM
+            criteria_info = []
+            for criterion in criteria_batch:
+                # Format scoring definitions for reference
+                scoring_defs = criterion.get("scoring_definitions", {})
+                formatted_scoring = []
+                
+                for score, definition in scoring_defs.items():
+                    formatted_scoring.append(f"Score {score}: {definition}")
+                
+                criteria_info.append({
+                    "criterion_id": criterion["criterion_id"],
+                    "criterion_name": criterion["criterion_name"],
+                    "criterion_question": criterion["criterion_question"],
+                    "dimension_name": criterion["dimension_name"],
+                    "scoring_summary": "\n".join(formatted_scoring)
+                })
+            
+            # Create system prompt for generating instructions
+            system_prompt = f"""You are an expert helping create clear guidance for extracting evidence about assessment criteria from {document_type} documents."""
+            
+            # Create document context string
+            document_context = f"""DOCUMENT CONTEXT:
+- Document Type: {document_type}
+- Document Structure: {document_structure}
+- Entity Being Assessed: {entity_name} (Type: {entity_type})"""
+            
+            # Create human prompt for simple, effective extraction instructions
+            human_prompt = f"""Create clear, focused extraction instructions for each criterion.
+
+{document_context}
+
+CRITERIA TO PROCESS:
+{json.dumps(criteria_info, indent=2)}
+
+For each criterion, create simple but effective instructions that help extract evidence from a document. Focus on:
+
+1. WHAT TO LOOK FOR: Key phrases, terminology, and concepts related to this criterion
+2. TYPES OF EVIDENCE: Specific statements, metrics, or indicators that would support assessment
+3. HELPFUL CONTEXT: Background information that helps interpret evidence for this criterion
+
+Make the instructions conversational and practical - as if you're guiding someone to find relevant evidence.
+The instructions will be used to create comprehensive evidence packets that include direct quotes, metrics, and relevance analysis.
+"""
+
+            # Call LLM for instructions
+            result = await self._structured_output_call(
+                prompt=human_prompt,
+                output_schema={
+                    "type": "object",
+                    "properties": {
+                        "instructions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "criterion_id": {"type": "string"},
+                                    "extraction_instructions": {"type": "string"}
+                                },
+                                "required": ["criterion_id", "extraction_instructions"]
+                            }
+                        }
+                    },
+                    "required": ["instructions"]
+                },
+                system_prompt=system_prompt,
+                temperature=0.7
+            )
+            
+            # Process results
+            if "instructions" in result:
+                for instructions in result["instructions"]:
+                    criterion_id = instructions["criterion_id"]
+                    
+                    # Find the corresponding criterion in the batch
+                    for criterion in criteria_batch:
+                        if criterion["criterion_id"] == criterion_id:
+                            # Add extraction instructions to criterion
+                            criterion["extraction_instructions"] = instructions["extraction_instructions"]
+                            
+                            # Add to the result list
+                            criteria_with_instructions.append(criterion)
+                            break
+            
+        self.logger.info(f"Generated extraction instructions for {len(criteria_with_instructions)} criteria")
+        
+        return criteria_with_instructions
+    
+    async def _identify_related_criteria(self, framework_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Identify related criteria that should be evaluated together for consistency.
+        
+        Args:
+            framework_analysis: Framework analysis results
+            
+        Returns:
+            List of criteria groups
+        """
+        if not self.use_combined_evaluation:
+            return []
+            
+        self.logger.info("Identifying related criteria for combined evaluation")
+        
+        # Get all dimensions with multiple criteria
+        groups = []
+        
+        for dimension in framework_analysis["dimensions"]:
+            dimension_id = dimension["id"]
+            dimension_name = dimension["name"]
+            criteria = dimension["criteria"]
+            
+            # Skip dimensions with just one criterion
+            if len(criteria) <= 1:
+                continue
+                
+            # For simplicity in POC, just group by dimension with a maximum size
             current_group = []
             
-            for group in criterion_groups:
-                if len(current_group) + len(group) <= max_group_size:
-                    current_group.extend(group)
-                else:
-                    if current_group:
-                        consolidated_groups.append(current_group)
-                    current_group = group
+            for criterion in criteria:
+                current_group.append({
+                    "dimension_id": dimension_id,
+                    "criterion_id": criterion["id"],
+                    "criterion_name": criterion["name"]
+                })
+                
+                # When we reach max size, add the group and start a new one
+                if len(current_group) >= self.max_criteria_per_group:
+                    groups.append({
+                        "dimension_id": dimension_id,
+                        "dimension_name": dimension_name,
+                        "criteria": current_group.copy(),
+                        "rationale": f"Grouped for consistent evaluation within {dimension_name}"
+                    })
+                    current_group = []
             
+            # Add any remaining criteria as a group
             if current_group:
-                consolidated_groups.append(current_group)
-            
-            criterion_groups = consolidated_groups
+                groups.append({
+                    "dimension_id": dimension_id,
+                    "dimension_name": dimension_name,
+                    "criteria": current_group,
+                    "rationale": f"Grouped for consistent evaluation within {dimension_name}"
+                })
         
-        return criterion_groups
+        self.logger.info(f"Identified {len(groups)} criteria groups for combined evaluation")
+        return groups
+    
+    def _create_evaluator_instructions(self, framework_analysis: Dict[str, Any]) -> str:
+        """
+        Create clear instructions for the evaluator.
+        
+        Args:
+            framework_analysis: Framework analysis results
+            
+        Returns:
+            Evaluator instructions
+        """
+        # Create base instructions
+        instructions = """Use the consolidated evidence packets to assess each criterion.
+
+Each evidence packet contains:
+- DIRECT QUOTES: Exact statements from the document
+- KEY METRICS: Numerical data and measurements
+- RELEVANCE ANALYSIS: Explanation of how the evidence relates to the criterion
+- ASSESSMENT IMPLICATION: What the evidence suggests about rating
+
+When evaluating criteria:
+
+1. EVIDENCE QUALITY
+   - Prioritize direct quotes and specific metrics
+   - Consider both the quantity and quality of evidence
+   - Note when evidence is particularly strong or limited
+
+2. ASSESSMENT APPROACH
+   - Make DIRECT assessments when evidence clearly addresses the criterion
+   - Make INFERRED assessments when evidence is limited but allows for reasonable inference
+   - Mark as INSUFFICIENT EVIDENCE when no meaningful assessment is possible
+
+3. RATIONALE CLARITY
+   - For direct assessments: Reference specific quotes and metrics
+   - For inferred assessments: Mark with [INFERRED] and explain your reasoning
+   - Be transparent about confidence levels
+
+4. CONSISTENCY
+   - Maintain consistent standards across related criteria
+   - Compare assessments within dimensions for calibration"""
+
+        # Add framework-specific guidance if available
+        framework_name = framework_analysis.get("framework_name", "")
+        if framework_name:
+            instructions += f"\n\nThis evaluation is for the {framework_name} framework. "
+            
+            # Add framework-specific tips based on name
+            if "financial" in framework_name.lower():
+                instructions += """When evaluating financial criteria:
+- Look for specific financial metrics and KPIs
+- Pay attention to year-over-year comparisons
+- Consider both absolute numbers and trends
+- Note how executives contextualize financial results"""
+            elif "earnings call" in framework_name.lower():
+                instructions += """When evaluating an earnings call:
+- Consider both prepared remarks and Q&A responses
+- Note differences between executive statements
+- Pay attention to how questions are answered or avoided
+- Consider what topics executives emphasize vs. downplay"""
+                
+        return instructions
     
     def _define_output_schema(self, framework_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -742,10 +748,12 @@ Your analysis should be concise but informative, focusing on aspects that would 
                                         "rating": {"type": "number"},
                                         "rationale": {"type": "string"},
                                         "confidence": {"type": "number"},
+                                        "strengths": {"type": "array", "items": {"type": "string"}},
+                                        "weaknesses": {"type": "array", "items": {"type": "string"}},
                                         "evidence_summary": {"type": "string"},
-                                        "evidence_count": {"type": "integer"}
+                                        "assessment_type": {"type": "string", "enum": ["direct", "inferred", "insufficient_evidence"]}
                                     },
-                                    "required": ["id", "name", "rating", "rationale"]
+                                    "required": ["id", "name", "rating", "rationale", "assessment_type"]
                                 }
                             }
                         },
@@ -756,588 +764,114 @@ Your analysis should be concise but informative, focusing on aspects that would 
             "required": ["overall_assessment", "dimensions"]
         }
         
-        # Define dimension-specific schemas
-        dimension_schemas = {}
-        for dimension in dimensions:
-            dimension_id = dimension.get("id", "")
-            if not dimension_id:
-                continue
-                
-            criteria_schema = {
-                "type": "object",
-                "properties": {}
-            }
-            
-            # Add each criterion to the schema
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                if not criterion_id:
-                    continue
-                    
-                scoring_method = criterion.get("scoring_method", "scale_1_5")
-                
-                if scoring_method == "evidence_based":
-                    # For evidence-based criteria, store evidence items
-                    criteria_schema["properties"][criterion_id] = {
-                        "type": "object",
-                        "properties": {
-                            "rating": {"type": ["number", "null"]},
-                            "evidence": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            },
-                            "summary": {"type": "string"},
-                            "confidence": {"type": "number"}
-                        }
-                    }
-                else:
-                    # For numeric scale criteria
-                    criteria_schema["properties"][criterion_id] = {
-                        "type": "object",
-                        "properties": {
-                            "rating": {"type": ["number", "null"]},
-                            "rationale": {"type": "string"},
-                            "evidence_summary": {"type": "string"},
-                            "confidence": {"type": "number"}
-                        }
-                    }
-            
-            dimension_schemas[dimension_id] = criteria_schema
-        
-        # Add dimension-specific schemas
-        schema["dimension_schemas"] = dimension_schemas
-        
-        # Add evaluator output schema
-        schema["evaluator_output"] = {
-            "type": "object",
-            "properties": {
-                "dimensions": {
-                    "type": "object",
-                    "properties": {}
-                },
-                "overall": {
-                    "type": "object",
-                    "properties": {
-                        "average_rating": {"type": "number"},
-                        "executive_summary": {"type": "string"},
-                        "key_strengths": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
-                        "key_improvements": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        }
-                    }
-                }
-            }
-        }
-        
-        # Add dimension properties to evaluator schema
-        for dimension_id in dimension_schemas.keys():
-            schema["evaluator_output"]["properties"]["dimensions"]["properties"][dimension_id] = {
-                "type": "object",
-                "properties": {
-                    "criteria": {"type": "object"},
-                    "summary": {
-                        "type": "object",
-                        "properties": {
-                            "average_rating": {"type": "number"},
-                            "strengths": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            },
-                            "weaknesses": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            },
-                            "summary": {"type": "string"}
-                        }
-                    }
-                }
-            }
-        
-        # Add reporter output schema (scorecard)
-        schema["reporter_output"] = {
-            "type": "object",
-            "properties": {
-                "scorecard": {
-                    "type": "object",
-                    "properties": {
-                        "overall_rating": {"type": "number"},
-                        "executive_summary": {"type": "string"},
-                        "key_strengths": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
-                        "key_improvements": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
-                        "dimensions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "name": {"type": "string"},
-                                    "average_rating": {"type": "number"},
-                                    "criteria": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "properties": {
-                                                "id": {"type": "string"},
-                                                "name": {"type": "string"},
-                                                "rating": {"type": "number"},
-                                                "rationale": {"type": "string"},
-                                                "evidence_summary": {"type": "string"}
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
         return schema
     
-    async def _generate_parallel_strategy(
-        self,
-        document_analysis: Dict[str, Any],
-        framework_analysis: Dict[str, Any],
-        criteria_groups: List[List[Dict[str, Any]]],
-        chunking_strategy: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Generate assessment strategy with parallel extraction.
-        
-        Args:
-            document_analysis: Document analysis results
-            framework_analysis: Framework analysis results
-            criteria_groups: Grouped criteria for parallel extraction
-            chunking_strategy: Chunking strategy
-            
-        Returns:
-            Complete assessment strategy
-        """
-        # Create system prompt for strategy generation
-        system_prompt = """You are an expert strategy designer for AI assessment systems. 
-        Your task is to design an optimal assessment strategy based on document and framework analysis. 
-        The strategy should specify which agents to deploy, how they should be configured, and how they should be sequenced."""
-        
-        # Get user options if available
-        user_options = self.context.options.get("user_options", {})
-        user_preferences_text = ""
-        
-        if user_options:
-            user_preferences_text = "USER PREFERENCES:\n"
-            for key, value in user_options.items():
-                if value is not None:
-                    user_preferences_text += f"- {key}: {value}\n"
-        
-        # Collect group information for the prompt
-        groups_text = ""
-        for i, group in enumerate(criteria_groups):
-            groups_text += f"Group {i+1}:\n"
-            for criterion in group:
-                groups_text += f"- {criterion['dimension_name']} / {criterion['criterion_name']}\n"
-            groups_text += "\n"
-        
-        # Create human prompt for strategy design
-        json_schema = r'''```json
-{
-  "strategy_type": "string",
-  "chunking_strategy": {
-    "method": "string",
-    "size": "number",
-    "overlap": "number",
-    "rationale": "string"
-  },
-  "agents": [
-    {
-      "agent_type": "string",
-      "configuration": {},
-      "instructions": "string",
-      "inputs": ["string"],
-      "outputs": ["string"]
-    }
-  ],
-  "processing_sequence": ["string"],
-  "token_allocation": {
-    "total_estimated": "number",
-    "by_agent": {}
-  },
-  "rationale": "string"
-}
-```'''
-        
-        human_prompt = f"""Design an optimal assessment strategy based on the following document and framework analysis.
-
-DOCUMENT ANALYSIS:
-{json.dumps(document_analysis, indent=2)}
-
-FRAMEWORK ANALYSIS:
-{json.dumps(framework_analysis, indent=2)}
-
-CRITERIA GROUPS FOR PARALLEL EXTRACTION:
-{groups_text}
-
-RECOMMENDED CHUNKING STRATEGY:
-{json.dumps(chunking_strategy, indent=2)}
-
-{user_preferences_text}
-
-Your strategy should include:
-
-1. Chunking strategy (use the recommended one unless you have a strong reason to modify it)
-2. Agent deployment plan with one extractor per criteria group and specific instructions for each
-3. Processing sequence (order of operations)
-4. Custom instructions for each agent based on their specific criteria
-5. Reasoning for your strategy choices
-
-Available agents:
-- Extractor: Extracts content related to specific criteria (one extractor per criteria group)
-- Evaluator: Evaluates criteria based on all extracted evidence
-- Reporter: Generates structured assessment reports
-
-Each extractor should focus deeply on its assigned criteria to find ALL potential evidence.
-The evaluator should produce structured ratings by analyzing the collective evidence for each criterion.
-The reporter should format the structured evaluations into a scorecard without duplicating the evaluator's work.
-
-Please provide your strategy as a structured JSON object with the following schema:
-
-{json_schema}"""
-        
-        # Call LLM for strategy design
-        try:
-            strategy_json, _ = await self._safe_llm_call(
-                "generate_and_parse_json",
-                prompt=human_prompt,
-                system_prompt=system_prompt,
-                description="assessment strategy",
-                temperature=0.4,
-                max_tokens=3000
-            )
-            
-            # Ensure the strategy has all required sections
-            strategy = self._validate_strategy(strategy_json)
-            
-            # Ensure agent naming is consistent
-            strategy = self._normalize_agent_names(strategy)
-            
-            return strategy
-            
-        except Exception as e:
-            self.logger.error(f"Error generating parallel assessment strategy: {str(e)}", exc_info=True)
-            
-            # Create fallback strategy
-            fallback_strategy = self._create_fallback_strategy(
-                document_analysis, 
-                framework_analysis, 
-                criteria_groups,
-                chunking_strategy
-            )
-            
-            self.add_warning(f"Used fallback strategy due to error: {str(e)}")
-            
-            return fallback_strategy
-    
-    def _normalize_agent_names(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Ensure agent names are consistent throughout strategy.
-        
-        Args:
-            strategy: Assessment strategy
-            
-        Returns:
-            Normalized strategy
-        """
-        # Create a copy to avoid modifying the original
-        normalized = strategy.copy()
-        
-        # Normalize agent types in agents list
-        if "agents" in normalized:
-            for agent in normalized["agents"]:
-                if "agent_type" in agent:
-                    agent_type = agent["agent_type"].lower()
-                    
-                    # Standardize names
-                    if agent_type in ["extractor", "extractagent", "extract"]:
-                        agent["agent_type"] = "extractor"
-                    elif agent_type in ["evaluator", "evaluateagent", "evaluate"]:
-                        agent["agent_type"] = "evaluator"
-                    elif agent_type in ["reporter", "reportagent", "report"]:
-                        agent["agent_type"] = "reporter"
-        
-        # Normalize processing sequence
-        if "processing_sequence" in normalized:
-            normalized_sequence = []
-            for agent_type in normalized["processing_sequence"]:
-                agent_type = agent_type.lower()
-                
-                # Standardize names
-                if agent_type in ["extractor", "extractagent", "extract"]:
-                    normalized_sequence.append("extractor")
-                elif agent_type in ["evaluator", "evaluateagent", "evaluate"]:
-                    normalized_sequence.append("evaluator")
-                elif agent_type in ["reporter", "reportagent", "report"]:
-                    normalized_sequence.append("reporter")
-                else:
-                    normalized_sequence.append(agent_type)
-            
-            normalized["processing_sequence"] = normalized_sequence
-        
-        return normalized
-    
-    def _validate_strategy(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Validate and fix strategy if needed.
-        
-        Args:
-            strategy: Assessment strategy
-            
-        Returns:
-            Validated strategy
-        """
-        # Create a deep copy to avoid modifying the original
-        validated = strategy.copy() if strategy else {}
-        
-        # Ensure required top-level keys
-        required_keys = ["strategy_type", "chunking_strategy", "agents", "processing_sequence", "rationale"]
-        for key in required_keys:
-            if key not in validated:
-                if key == "strategy_type":
-                    validated[key] = "parallel_extraction"
-                elif key == "chunking_strategy":
-                    validated[key] = {"method": "fixed_size", "size": 8000, "overlap": 200, "rationale": "Default chunking strategy"}
-                elif key == "agents":
-                    validated[key] = []
-                elif key == "processing_sequence":
-                    validated[key] = []
-                elif key == "rationale":
-                    validated[key] = "Default assessment strategy with parallel extraction"
-        
-        # Ensure chunking strategy has required fields
-        chunking_keys = ["method", "size", "overlap", "rationale"]
-        for key in chunking_keys:
-            if key not in validated["chunking_strategy"]:
-                if key == "method":
-                    validated["chunking_strategy"][key] = "fixed_size"
-                elif key == "size":
-                    validated["chunking_strategy"][key] = 8000
-                elif key == "overlap":
-                    validated["chunking_strategy"][key] = 200
-                elif key == "rationale":
-                    validated["chunking_strategy"][key] = "Default chunking parameters"
-        
-        # Check if we have agents but no processing sequence
-        if validated["agents"] and not validated["processing_sequence"]:
-            # Create default sequence from agent types
-            validated["processing_sequence"] = [agent.get("agent_type") for agent in validated["agents"]]
-        
-        # Estimate token allocation if not provided
-        if "token_allocation" not in validated:
-            validated["token_allocation"] = self._estimate_token_allocation(validated)
-        
-        return validated
-    
-    def _estimate_token_allocation(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Estimate token allocation for the strategy.
-        
-        Args:
-            strategy: Assessment strategy
-            
-        Returns:
-            Token allocation dictionary
-        """
-        # Start with a baseline allocation
-        allocation = {
-            "total_estimated": 0,
-            "by_agent": {}
-        }
-        
-        # Estimate based on document length
-        document_length = len(self.context.document_text)
-        document_tokens = self.estimate_tokens(self.context.document_text)
-        
-        # Adjust total based on document size and chunking
-        chunking = strategy.get("chunking_strategy", {})
-        chunk_size = chunking.get("size", 8000)
-        chunk_overlap = chunking.get("overlap", 200)
-        
-        # Estimate number of chunks
-        if chunk_size > 0:
-            chunk_count = max(1, document_length // max(1, (chunk_size - chunk_overlap)))
-        else:
-            chunk_count = 1
-        
-        # Count extractors
-        extractor_count = sum(1 for agent in strategy.get("agents", []) 
-                           if agent.get("agent_type", "").lower() == "extractor")
-        
-        # Allocate tokens by agent
-        total_tokens = 0
-        by_agent = {}
-        
-        for agent in strategy.get("agents", []):
-            agent_type = agent.get("agent_type", "").lower()
-            
-            if agent_type == "extractor":
-                # Extractors process chunks
-                tokens_per_extractor = (document_tokens // max(1, extractor_count)) * 1.2
-                agent_tokens = int(tokens_per_extractor)
-                by_agent[agent_type] = by_agent.get(agent_type, 0) + agent_tokens
-                total_tokens += agent_tokens
-                
-            elif agent_type == "evaluator":
-                # Evaluators process extracted evidence
-                agent_tokens = int(document_tokens * 0.3)
-                by_agent[agent_type] = agent_tokens
-                total_tokens += agent_tokens
-                
-            elif agent_type == "reporter":
-                # Reporters create reports
-                agent_tokens = int(document_tokens * 0.2)
-                by_agent[agent_type] = agent_tokens
-                total_tokens += agent_tokens
-                
-            else:
-                # Unknown agent type
-                agent_tokens = int(document_tokens * 0.1)
-                by_agent[agent_type] = agent_tokens
-                total_tokens += agent_tokens
-        
-        # Create allocation dictionary
-        allocation = {
-            "total_estimated": total_tokens,
-            "by_agent": by_agent
-        }
-        
-        return allocation
-    
-    def _create_fallback_strategy(
-        self, 
-        document_analysis: Dict[str, Any], 
-        framework_analysis: Dict[str, Any],
-        criteria_groups: List[List[Dict[str, Any]]],
-        chunking_strategy: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _create_fallback_strategy(self) -> Dict[str, Any]:
         """
         Create a fallback strategy if strategy generation fails.
         
-        Args:
-            document_analysis: Document analysis results
-            framework_analysis: Framework analysis results
-            criteria_groups: Grouped criteria for parallel extraction
-            chunking_strategy: Chunking strategy
-            
         Returns:
             Fallback assessment strategy
         """
-        self.logger.info("Creating fallback assessment strategy")
+        self.logger.info("Creating fallback strategy for consolidated evidence packets")
         
-        # Create extractor agents for each criteria group
+        # Get framework dimensions and criteria
+        dimensions = self.context.framework.get("dimensions", [])
+        
+        # Create one extractor per criterion
         extractor_agents = []
-        for i, group in enumerate(criteria_groups):
-            # Extract criteria and dimension IDs for instructions
-            criteria_ids = [criterion["criterion_id"] for criterion in group]
-            dimension_ids = list(set(criterion["dimension_id"] for criterion in group))
-            
-            # Create instructions
-            criteria_text = "\n".join([
-                f"- {criterion['dimension_name']} / {criterion['criterion_name']}: {criterion.get('criterion_question', '')}"
-                for criterion in group
-            ])
-            
-            instructions = f"""Extract ALL evidence related to the following criteria:
-
-{criteria_text}
-
-For each piece of relevant evidence, identify:
-1. Which criterion it relates to
-2. How strongly it supports or addresses the criterion
-3. The specific text from the document that provides the evidence
-
-Be thorough and extract all potential evidence, even indirect references that might be relevant.
-Consider tone, context, and implications when identifying relevant content."""
-            
-            # Create specialized name
-            agent_type = "extractor"
-            if len(group) == 1:
-                # For single criterion, add name to type
-                agent_type = f"extractor ({group[0]['criterion_name'].lower()})"
-            
-            # Create extractor configuration
-            extractor_config = {
-                "agent_type": agent_type,
-                "configuration": {
-                    "extraction_type": "direct",
-                    "batch_size": 1,
-                    "min_confidence": 0.6,
-                    "criteria_ids": criteria_ids,
-                    "dimension_ids": dimension_ids
-                },
-                "instructions": instructions,
-                "inputs": ["document_chunks"],
-                "outputs": [f"extracted_evidence_group_{i+1}"]
-            }
-            
-            extractor_agents.append(extractor_config)
         
-        # Create evaluator agent
+        for dimension in dimensions:
+            dimension_id = dimension.get("id", "")
+            
+            if not dimension_id:
+                continue
+                
+            for criterion in dimension.get("criteria", []):
+                criterion_id = criterion.get("id", "")
+                criterion_name = criterion.get("name", "")
+                
+                if not criterion_id:
+                    continue
+                
+                # Simple instructions
+                instructions = f"""Create a comprehensive evidence packet for {criterion_name}.
+
+Look for:
+1. Direct quotes from executives or statements in the document
+2. Metrics, figures, and quantitative data
+3. Contextual information relevant to understanding this criterion
+4. Any information that helps assess this criterion
+
+Organize your findings into a structured evidence packet with sections for quotes, metrics, and context.
+"""
+                
+                # Create extractor configuration
+                extractor_config = {
+                    "agent_type": f"extractor_{criterion_id}",
+                    "configuration": {
+                        "criteria_ids": [criterion_id],
+                        "dimension_ids": [dimension_id]
+                    },
+                    "instructions": instructions
+                }
+                
+                extractor_agents.append(extractor_config)
+        
+        # Create evaluator
         evaluator_config = {
             "agent_type": "evaluator",
             "configuration": {
-                "evaluation_type": "structured",
-                "confidence_threshold": 0.6,
+                "evaluation_type": "consolidated_packet",
+                "use_combined_evaluation": False,
+                "confidence_threshold": 0.4,
                 "infer_missing": True,
                 "output_format": "scorecard"
             },
-            "instructions": """Evaluate each criterion based on ALL collected evidence. 
-Produce structured ratings with clear justifications. 
-Identify strengths and weaknesses for each criterion.
-Generate an overall assessment with key strengths and areas for improvement.""",
-            "inputs": ["extracted_evidence_group_1", "extracted_evidence_group_2", "extracted_evidence_group_3"],
-            "outputs": ["structured_assessments"]
+            "instructions": """Evaluate each criterion based on its consolidated evidence packet.
+Use direct assessment when clear evidence is available.
+Use inferred assessment when evidence is limited but allows for reasonable inference.
+Mark as insufficient evidence when no relevant evidence is available."""
         }
         
-        # Create reporter agent
+        # Create reporter
         reporter_config = {
             "agent_type": "reporter",
             "configuration": {
                 "report_type": "scorecard",
-                "include_evidence": True
+                "include_evidence": True,
+                "include_confidence": True,
+                "include_assessment_types": True,
+                "export_formats": ["json"]
             },
             "instructions": """Create a structured scorecard from the evaluations.
-Format the ratings and justifications into a clear, presentable structure.
-Do not duplicate the evaluator's analysis work.""",
-            "inputs": ["structured_assessments"],
-            "outputs": ["assessment_scorecard"]
+Clearly distinguish between direct and inferred assessments."""
         }
         
-        # Combine agents
+        # Combine all agents
         all_agents = extractor_agents + [evaluator_config, reporter_config]
         
         # Create processing sequence
-        extractor_names = ["extractor"] * len(extractor_agents)
-        processing_sequence = extractor_names + ["evaluator", "reporter"]
+        extractor_steps = ["extractor"] * len(extractor_agents)
+        processing_sequence = extractor_steps + ["evaluator", "reporter"]
+        
+        # Create chunking strategy
+        chunking_strategy = {
+            "method": "fixed_size",
+            "size": 12000,
+            "overlap": 1000,
+            "rationale": "Default chunking strategy for fallback"
+        }
         
         # Create fallback strategy
         fallback_strategy = {
-            "strategy_type": "parallel_extraction",
+            "strategy_type": "fallback_consolidated_evidence_packets",
             "chunking_strategy": chunking_strategy,
             "agents": all_agents,
             "processing_sequence": processing_sequence,
-            "token_allocation": {},
-            "rationale": "Specialized strategy with one extractor per criterion or small group, followed by structured evaluation and reporting."
+            "rationale": "Fallback strategy using consolidated evidence packets with one extractor per criterion."
         }
         
-        # Estimate token allocation
-        fallback_strategy["token_allocation"] = self._estimate_token_allocation(fallback_strategy)
+        self.logger.info(f"Created fallback strategy with {len(extractor_agents)} extractors")
         
         return fallback_strategy

@@ -1,16 +1,16 @@
 """
-Enhanced Strategy Executor - Streamlined execution with improved agent integration
+Strategy Executor - Orchestrates assessment process with semantic group awareness
 
-This module provides an enhanced StrategyExecutor class that coordinates the assessment
-process with better agent integration, clearer phase tracking, and improved reporting.
+This module provides the StrategyExecutor class that coordinates the entire
+assessment process from document chunking to final report generation, with
+improved evidence flow and semantic criteria group handling.
 """
 
 import logging
 import json
-import re
-import os
 import asyncio
-from typing import Dict, Any, List, Optional, Tuple, Type
+import time
+from typing import Dict, Any, List, Optional, Tuple, Type, Set, Union
 
 # Import agents
 from core.agents.base import BaseAgent
@@ -22,27 +22,18 @@ from core.agents.reporter import ReporterAgent
 # Import other components
 from core.context import AssessmentContext
 from core.models.document import Document
-from core.processors.chunker import Chunker
-
-# Import utilities
-import sys
-import os
-# Ensure utils is in path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import path_utils
 
 class StrategyExecutor:
     """
-    Enhanced Strategy Executor with improved agent integration and phase tracking.
+    Orchestrates the assessment process with semantic criteria grouping.
     
     The Strategy Executor is responsible for:
     1. Running the Meta Planner to design assessment strategies
-    2. Configuring and deploying agents according to strategy
-    3. Managing parallel extractor instances
-    4. Tracking resources and adapting as needed
-    5. Providing detailed execution status updates
-    6. Formatting results in a UI-ready structure
-    7. Coordinating the enhanced agents for better assessment quality
+    2. Processing document chunking according to strategy
+    3. Deploying extractors based on semantic criteria groups
+    4. Ensuring proper evidence flow from extractors to evaluators
+    5. Tracking evidence collection and assessment creation
+    6. Generating final assessment reports
     """
     
     def __init__(
@@ -68,12 +59,27 @@ class StrategyExecutor:
         self.strategy = None
         self.agents = {}
         
-        # Initialize context with the enhanced AssessmentContext
-        self.context = AssessmentContext(document.text, framework, self.options)
+        # Initialize context with document properties
+        document_options = {
+            "document_name": document.filename,
+            "document_type": document.document_type,
+            "document_bias": document.document_bias,
+            "primary_entity": document.primary_entity,
+            **(self.options or {})
+        }
+        self.context = AssessmentContext(document.text, framework, document_options)
         
         # Set up logging
-        self.logger = logging.getLogger("learning-lab-ai.processor.execution")
+        self.logger = logging.getLogger("learning-lab-ai.execution")
         self.logger.info(f"Strategy executor initialized for document: {document.filename}")
+        
+        # Diagnostic tracking
+        self.diagnostics = {
+            "execution_start": time.time(),
+            "stages_completed": [],
+            "evidence_checks": [],
+            "token_usage": {}
+        }
     
     async def get_strategy_preview(self) -> Dict[str, Any]:
         """
@@ -85,13 +91,6 @@ class StrategyExecutor:
         if not self.strategy:
             self.strategy = await self.plan()
         
-        # Count extractors by type
-        extractor_counts = {}
-        for agent in self.strategy.get("agents", []):
-            agent_type = agent.get("agent_type", "")
-            if self._normalize_agent_type(agent_type) == 'extractor':
-                extractor_counts[agent_type] = extractor_counts.get(agent_type, 0) + 1
-        
         # Create a user-friendly preview of the strategy
         preview = {
             "strategy_type": self.strategy.get("strategy_type", "unknown"),
@@ -102,11 +101,11 @@ class StrategyExecutor:
                 "overlap": self.strategy.get("chunking_strategy", {}).get("overlap", 0),
                 "rationale": self.strategy.get("chunking_strategy", {}).get("rationale", "")
             },
-            "extractors": extractor_counts,
-            "total_extractors": sum(extractor_counts.values()),
+            "semantic_groups": self.strategy.get("semantic_groups", []),
+            "total_extractors": len([a for a in self.strategy.get("agents", []) 
+                                if self._is_extractor(a.get("agent_type", ""))]),
             "agents": [],
-            "processing_sequence": self.strategy.get("processing_sequence", []),
-            "estimated_tokens": self.strategy.get("token_allocation", {}).get("total_estimated", 0)
+            "processing_sequence": self.strategy.get("processing_sequence", [])
         }
         
         # Add agent details
@@ -114,7 +113,9 @@ class StrategyExecutor:
             agent_preview = {
                 "type": agent.get("agent_type", "unknown"),
                 "configuration": agent.get("configuration", {}),
-                "instructions": agent.get("instructions", "")
+                "instructions": agent.get("instructions", "")[:100] + "..." 
+                               if len(agent.get("instructions", "")) > 100 
+                               else agent.get("instructions", "")
             }
             preview["agents"].append(agent_preview)
         
@@ -129,19 +130,29 @@ class StrategyExecutor:
         """
         self.logger.info("Running Meta Planner to design strategy")
         
-        # Set planning stage with appropriate name for progress tracking
+        # Set planning stage
         self.context.set_stage("strategy_design")
         
         # Initialize Meta Planner
         meta_planner = MetaPlannerAgent(self.llm, self.context)
         
         # Design strategy
-        self.strategy = await meta_planner.process()
+        strategy = await meta_planner.process()
+        
+        # Store strategy in context
+        self.context.set_strategy(strategy)
         
         # Complete planning stage
-        self.context.complete_stage("strategy_design", {"strategy": self.strategy})
+        self.context.complete_stage("strategy_design", {"strategy": strategy})
         
-        return self.strategy
+        # Add to diagnostics
+        self.diagnostics["stages_completed"].append({
+            "stage": "strategy_design",
+            "time": time.time() - self.diagnostics["execution_start"],
+            "result": "success"
+        })
+        
+        return strategy
     
     async def execute(self, strategy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -155,6 +166,7 @@ class StrategyExecutor:
         """
         try:
             self.logger.info("Starting assessment execution")
+            execution_start = time.time()
             
             # Begin with document analysis stage
             self.context.set_stage("document_analysis")
@@ -166,58 +178,171 @@ class StrategyExecutor:
                 self.strategy = await self.plan()
             
             # Complete document analysis
+            document_properties = {
+                "document_type": self.document.document_type,
+                "document_structure": self.document.document_structure,
+                "primary_entity": self.document.primary_entity,
+                "document_bias": self.document.document_bias,
+                "keywords": self.document.keywords
+            }
+            self.context.set_document_properties(document_properties)
+            
             self.context.complete_stage("document_analysis", {
                 "document_length": len(self.document.text),
+                "document_type": self.document.document_type,
+                "entity_name": self.document.primary_entity.get("name", "unknown"),
                 "strategy": self.strategy.get("strategy_type")
+            })
+            
+            # Add to diagnostics
+            self.diagnostics["stages_completed"].append({
+                "stage": "document_analysis",
+                "time": time.time() - execution_start,
+                "result": "success"
             })
             
             # Process document chunking
             self.context.set_stage("chunking")
             chunks = await self._process_chunking()
             self.context.set_chunks(chunks)
-            self.document.set_chunks(chunks)
+            
             self.context.complete_stage("chunking", {"chunk_count": len(chunks)})
             
-            # Deploy and run agents according to strategy
-            processing_sequence = self.strategy.get("processing_sequence", [])
+            # Add to diagnostics
+            self.diagnostics["stages_completed"].append({
+                "stage": "chunking",
+                "time": time.time() - execution_start,
+                "result": "success",
+                "chunks": len(chunks)
+            })
             
-            # Process each agent type in sequence
-            unique_agent_types = []
-            for agent_type in processing_sequence:
-                normalized_type = self._normalize_agent_type(agent_type)
-                if normalized_type not in unique_agent_types:
-                    unique_agent_types.append(normalized_type)
+            # Get evidence packets from strategy
+            evidence_packets = self.strategy.get("evidence_packets", [])
             
-            # Execute each unique agent type in sequence
-            for agent_type in unique_agent_types:
-                if agent_type == 'extractor':
-                    await self._deploy_and_run_extractors()
-                else:
-                    await self._deploy_and_run_agent(agent_type)
+            # Also check for evidence packets in context observations
+            observation_packets = self._get_evidence_packets_from_observations()
+            if observation_packets and not evidence_packets:
+                evidence_packets = observation_packets
+                self.logger.info(f"Using {len(observation_packets)} evidence packets from observations")
             
-            # Get raw assessment result
-            raw_result = self.context.get_final_result()
+            # Run extractors with evidence packets
+            self.context.set_stage("evidence_extraction")
+            extraction_results = await self._run_extractors_with_packets(evidence_packets, chunks)
+            
+            # Check evidence flow
+            evidence_count = self.context.get_evidence_count()
+            self.logger.info(f"Evidence count after extraction: {evidence_count}")
+            
+            # Track evidence by criteria for diagnostics
+            evidence_by_criteria = self._track_evidence_by_criteria()
+            self.logger.info(f"Criteria with evidence: {len(evidence_by_criteria)}")
+            
+            # Add diagnostic checkpoint
+            self.diagnostics["evidence_checks"].append({
+                "stage": "after_extraction",
+                "time": time.time() - execution_start,
+                "total_evidence": evidence_count,
+                "criteria_with_evidence": len(evidence_by_criteria)
+            })
+            
+            # Complete extraction stage
+            self.context.complete_stage("evidence_extraction", {
+                "total_evidence": evidence_count,
+                "criteria_with_evidence": len(evidence_by_criteria)
+            })
+            
+            # Run evaluator
+            self.context.set_stage("criterion_evaluation")
+            evaluation_results = await self._run_evaluator()
+            
+            # Update to dimension summarization phase
+            self.context.set_stage("dimension_summarization")
+            self.context.update_progress(0.5, "Summarizing dimension assessments")
+            
+            # Update to overall assessment phase
+            self.context.set_stage("overall_assessment")
+            self.context.update_progress(0.8, "Generating overall assessment")
+            self.context.complete_stage("overall_assessment", {"result": "success"})
+            
+            # Check assessment counts
+            assessment_stats = self.context.get_assessment_stats()
+            self.logger.info(
+                f"Assessment stats: {assessment_stats.get('assessed_criteria', 0)} criteria assessed, "
+                f"{assessment_stats.get('assessment_coverage', 0):.1%} coverage"
+            )
+            
+            # Add diagnostic checkpoint
+            self.diagnostics["evidence_checks"].append({
+                "stage": "after_evaluation",
+                "time": time.time() - execution_start,
+                "assessed_criteria": assessment_stats.get("assessed_criteria", 0),
+                "coverage": assessment_stats.get("assessment_coverage", 0)
+            })
+            
+            # Run reporter
+            self.context.set_stage("report_generation")
+            report_results = await self._run_reporter()
+            
+            # Update to report compilation phase
+            self.context.set_stage("report_compilation")
+            self.context.update_progress(0.9, "Compiling final assessment outputs")
+            self.context.complete_stage("report_compilation", {"result": "success"})
             
             # Format for UI display
-            ui_result = await self._format_result_for_ui(raw_result)
+            ui_result = await self._format_result_for_ui(
+                evaluation_results, 
+                report_results,
+                self.strategy
+            )
             
-            self.logger.info("Assessment execution completed successfully")
+            # Final diagnostic check
+            final_evidence = self.context.get_evidence_count()
+            self.logger.info(f"Final evidence count: {final_evidence}")
+            
+            # Calculate total execution time
+            execution_time = time.time() - execution_start
+            self.logger.info(f"Assessment execution completed in {execution_time:.2f}s with {final_evidence} evidence items")
+            
+            # Add final diagnostics
+            ui_result["diagnostics"] = self.diagnostics
             
             return ui_result
             
         except Exception as e:
+            self.stop_timer()
             self.logger.error(f"Error during assessment execution: {str(e)}", exc_info=True)
-            # Create error result in UI-ready format
+            
+            # Create error result
             error_result = {
                 "error": str(e),
                 "status": "failed",
                 "scorecard": {},
                 "reports": {"formats": {}},
-                "warnings": self.context.data.get("warnings", []),
-                "errors": self.context.data.get("errors", []) + [{"message": str(e), "stage": "execution"}]
+                "warnings": self.context.data.get("operations", {}).get("warnings", []),
+                "errors": self.context.data.get("operations", {}).get("errors", []) + [{"message": str(e), "stage": "execution"}],
+                "diagnostics": self.diagnostics
             }
             
             return error_result
+    
+    def _get_evidence_packets_from_observations(self) -> List[Dict[str, Any]]:
+        """
+        Get evidence packets from context observations.
+        
+        Returns:
+            List of evidence packets
+        """
+        packets = []
+        
+        # Get observations of type "evidence_packet"
+        packet_observations = self.context.get_agent_observations(observation_type="evidence_packet")
+        
+        for obs in packet_observations:
+            packet = obs.get("content")
+            if packet:
+                packets.append(packet)
+        
+        return packets
     
     async def _process_chunking(self) -> List[Dict[str, Any]]:
         """
@@ -234,6 +359,7 @@ class StrategyExecutor:
         self.logger.info(f"Processing document chunking with method={method}, size={size}, overlap={overlap}")
         
         # Initialize chunker
+        from core.processors.chunker import Chunker
         chunker = Chunker(self.document.text)
         
         # Process chunking
@@ -247,89 +373,188 @@ class StrategyExecutor:
         self.logger.info(f"Document chunking completed, generated {len(chunks)} chunks")
         return chunks
     
-    async def _deploy_and_run_extractors(self) -> Dict[str, Any]:
+    async def _run_extractors_with_packets(
+        self, 
+        evidence_packets: List[Dict[str, Any]],
+        chunks: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
-        Deploy and run multiple extractor agents in parallel with enhanced evidence categorization.
+        Run extractors based on evidence packets.
         
+        Args:
+            evidence_packets: List of evidence packets for extraction
+            chunks: Document chunks to process
+            
         Returns:
-            Combined extractor results
+            Combined extraction results
         """
-        self.logger.info("Deploying parallel extractor agents")
+        self.logger.info(f"Running extractors with {len(evidence_packets)} evidence packets")
         
-        # Set explicit extraction stage for progress tracking
-        self.context.set_stage("evidence_extraction")
-        
-        # Find all extractor configs from strategy
+        # Get extractor configurations from strategy
         extractor_configs = []
         for agent in self.strategy.get("agents", []):
-            agent_type = agent.get("agent_type", "")
-            # Check if this is any kind of extractor
-            if self._normalize_agent_type(agent_type) == 'extractor':
+            if self._is_extractor(agent.get("agent_type", "")):
                 extractor_configs.append(agent)
         
-        if not extractor_configs:
-            raise ValueError("No extractor configurations found in strategy")
+        # If no extractor configs found, create from evidence packets
+        if not extractor_configs and evidence_packets:
+            for i, packet in enumerate(evidence_packets):
+                extractor_configs.append({
+                    "agent_type": f"extractor_{i+1}",
+                    "configuration": {
+                        "criteria_ids": packet.get("criteria_ids", []),
+                        "min_confidence": packet.get("confidence_threshold", 0.2)
+                    },
+                    "instructions": packet.get("extraction_instructions", "")
+                })
         
-        self.logger.info(f"Found {len(extractor_configs)} extractor configurations")
+        # Track results for all extractors
+        all_results = []
         
-        # Create and run extractors in parallel
-        extractor_tasks = []
+        # Run extractors with concurrency control
+        max_concurrent = min(self.options.get("max_concurrent", 3), len(extractor_configs))
         
-        # First extraction phase - find and categorize evidence
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        # Create tasks for all extractors
+        tasks = []
+        
         for i, config in enumerate(extractor_configs):
-            # Create agent options
-            agent_options = {
-                **config.get("configuration", {}),
-                "instructions": config.get("instructions", ""),
-                "strategy": self.strategy
-            }
+            # Find matching packet for this config
+            packet = self._find_matching_packet(config, evidence_packets, i)
             
-            # Create extractor with unique name
-            extractor_name = f"Extractor_{i+1}"
-            if "agent_type" in config and config["agent_type"] != "extractor":
-                # Use the specialized name if available
-                extractor_name = f"{extractor_name}_{config['agent_type']}"
+            # Create task with concurrency control
+            task = self._run_extractor_with_semaphore(
+                semaphore, config, packet, chunks, i)
             
-            extractor = ExtractorAgent(
-                self.llm, 
-                self.context, 
-                name=extractor_name, 
-                options=agent_options
-            )
-            
-            # Store the agent for later reference
-            self.agents[extractor_name] = extractor
-            
-            # Create task
-            task = extractor.process()
-            extractor_tasks.append(task)
+            tasks.append(task)
         
-        # Run all extractors in parallel
-        self.logger.info(f"Running {len(extractor_tasks)} extractors in parallel")
-        extractor_results = await asyncio.gather(*extractor_tasks)
+        # Run all extractors with concurrency control
+        extractor_results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Update progress to evidence categorization phase
-        self.context.set_stage("evidence_categorization")
-        
-        # Evidence categorization phase has been integrated into extractors
-        
-        # Complete extractor phase and move to consolidation
-        self.context.set_stage("evidence_consolidation")
+        # Process results and handle any exceptions
+        for i, result in enumerate(extractor_results):
+            if isinstance(result, Exception):
+                self.logger.error(f"Extractor {i+1} failed: {str(result)}")
+                self.context.add_warning(f"Extractor {i+1} failed: {str(result)}")
+                # Add empty result for this extractor
+                all_results.append({
+                    "by_chunk": {},
+                    "by_criterion": {},
+                    "total_evidence": 0,
+                    "error": str(result)
+                })
+            else:
+                all_results.append(result)
+                self.logger.info(f"Extractor {i+1} completed successfully")
         
         # Combine results
-        combined_results = self._combine_extractor_results(extractor_results)
-        
-        # Complete extraction stage
-        self.context.complete_stage("evidence_consolidation", {
-            "extractor_count": len(extractor_configs),
-            "evidence_count": combined_results.get("total_evidence", 0)
-        })
+        combined_results = self._combine_extractor_results(all_results)
         
         return combined_results
     
+    def _find_matching_packet(
+        self, 
+        config: Dict[str, Any], 
+        evidence_packets: List[Dict[str, Any]], 
+        index: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find the evidence packet that matches an extractor config.
+        
+        Args:
+            config: Extractor configuration
+            evidence_packets: Available evidence packets
+            index: Index of the extractor
+            
+        Returns:
+            Matching evidence packet or None
+        """
+        if not evidence_packets:
+            return None
+            
+        # Get criteria IDs from config
+        config_criteria_ids = config.get("configuration", {}).get("criteria_ids", [])
+        
+        # Try to find exact match by criteria IDs
+        for packet in evidence_packets:
+            packet_criteria_ids = packet.get("criteria_ids", [])
+            if set(config_criteria_ids) == set(packet_criteria_ids):
+                return packet
+        
+        # If no match, use the packet with the same index if possible
+        if index < len(evidence_packets):
+            return evidence_packets[index]
+        
+        # Otherwise use the first packet
+        return evidence_packets[0]
+    
+    async def _run_extractor_with_semaphore(
+        self, 
+        semaphore: asyncio.Semaphore,
+        config: Dict[str, Any],
+        packet: Optional[Dict[str, Any]],
+        chunks: List[Dict[str, Any]],
+        index: int
+    ) -> Dict[str, Any]:
+        """
+        Run extractor with concurrency control.
+        
+        Args:
+            semaphore: Semaphore for concurrency control
+            config: Extractor configuration
+            packet: Evidence packet
+            chunks: Document chunks
+            index: Extractor index
+            
+        Returns:
+            Extraction result
+        """
+        async with semaphore:
+            try:
+                # Update configuration with packet info if available
+                if packet:
+                    config_with_packet = dict(config)
+                    if "configuration" not in config_with_packet:
+                        config_with_packet["configuration"] = {}
+                    
+                    config_with_packet["configuration"]["evidence_packet"] = packet
+                    
+                    # Ensure instructions are set
+                    if not config_with_packet.get("instructions") and packet.get("extraction_instructions"):
+                        config_with_packet["instructions"] = packet["extraction_instructions"]
+                else:
+                    config_with_packet = config
+                
+                # Create extractor
+                extractor = ExtractorAgent(
+                    self.llm,
+                    self.context,
+                    name=f"Extractor_{index+1}",
+                    options=config_with_packet
+                )
+                
+                # Store agent for later reference
+                self.agents[f"extractor_{index+1}"] = extractor
+                
+                # Process chunks
+                self.logger.info(f"Starting Extractor_{index+1}")
+                result = await extractor.process(chunks)
+                
+                # Log evidence count
+                evidence_count = self.context.get_evidence_count()
+                self.logger.info(f"Extractor_{index+1} complete. Current evidence count: {evidence_count}")
+                
+                return result
+                
+            except Exception as e:
+                self.logger.error(f"Error in Extractor_{index+1}: {str(e)}", exc_info=True)
+                raise
+    
     def _combine_extractor_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Combine results from multiple extractors with category information.
+        Combine results from multiple extractors.
         
         Args:
             results: List of results from each extractor
@@ -341,11 +566,22 @@ class StrategyExecutor:
             "by_chunk": {},
             "by_criterion": {},
             "total_evidence": 0,
-            "evidence_categories": {}
+            "evidence_categories": {},
+            "extractors": len(results),
+            "successful_extractors": 0
         }
         
+        # Track criteria that received evidence
+        criteria_with_evidence = set()
+        
         # Process each extractor's results
-        for result in results:
+        for i, result in enumerate(results):
+            # Skip failed extractors
+            if "error" in result:
+                continue
+                
+            combined["successful_extractors"] += 1
+            
             # Combine chunk results
             for chunk_id, chunk_data in result.get("by_chunk", {}).items():
                 if chunk_id not in combined["by_chunk"]:
@@ -365,6 +601,10 @@ class StrategyExecutor:
                     combined["by_criterion"][criterion_key] = []
                 
                 combined["by_criterion"][criterion_key].extend(evidence_list)
+                
+                # Track criteria that received evidence
+                if evidence_list:
+                    criteria_with_evidence.add(criterion_key)
             
             # Add to total evidence count
             combined["total_evidence"] += result.get("total_evidence", 0)
@@ -383,643 +623,242 @@ class StrategyExecutor:
                                 combined["evidence_categories"][category] = 0
                             combined["evidence_categories"][category] += count
         
-        self.logger.info(f"Combined results from {len(results)} extractors: {combined['total_evidence']} total evidence items")
+        # Add criteria with evidence to results
+        combined["criteria_with_evidence"] = list(criteria_with_evidence)
+        combined["criteria_with_evidence_count"] = len(criteria_with_evidence)
+        
+        self.logger.info(
+            f"Combined results from {combined['successful_extractors']}/{combined['extractors']} extractors: "
+            f"{combined['total_evidence']} total evidence items for {len(criteria_with_evidence)} criteria"
+        )
+        
+        if criteria_with_evidence:
+            criteria_list = list(criteria_with_evidence)
+            # Only log first 5 to avoid excessively long logs
+            self.logger.info(f"Sample criteria with evidence: {', '.join(criteria_list[:5])}" +
+                           ("..." if len(criteria_list) > 5 else ""))
+        
         return combined
-            
-    async def _deploy_and_run_agent(self, agent_type: str) -> Dict[str, Any]:
+    
+    def _track_evidence_by_criteria(self) -> Dict[str, int]:
         """
-        Deploy and run a single agent according to strategy.
+        Track evidence counts by criteria after extraction.
         
-        Args:
-            agent_type: Type of agent to deploy
-            
         Returns:
-            Agent processing results
+            Dictionary mapping criteria IDs to evidence counts
         """
-        # Normalize agent type name (handle case differences)
-        normalized_agent_type = self._normalize_agent_type(agent_type)
+        evidence_by_criteria = {}
         
-        # Map agent type to appropriate stage for progress tracking
-        if normalized_agent_type == 'evaluator':
-            self.context.set_stage("criterion_evaluation")
-        elif normalized_agent_type == 'reporter':
-            self.context.set_stage("scorecard_generation")
-        else:
-            self.context.set_stage(f"{normalized_agent_type}_processing")
+        # Go through all dimensions and criteria
+        for dimension in self.context.framework.get("dimensions", []):
+            dimension_id = dimension.get("id", "")
+            
+            for criterion in dimension.get("criteria", []):
+                criterion_id = criterion.get("id", "")
+                
+                if dimension_id and criterion_id:
+                    # Get evidence count
+                    count = self.context.get_evidence_count(dimension_id, criterion_id)
+                    
+                    if count > 0:
+                        evidence_by_criteria[f"{dimension_id}:{criterion_id}"] = count
         
-        # Get agent configuration from strategy
-        agent_config = None
+        # Record observation for diagnostics
+        self.context.record_agent_observation(
+            "executor", 
+            "evidence_by_criteria",
+            evidence_by_criteria
+        )
+        
+        return evidence_by_criteria
+    
+    async def _run_evaluator(self) -> Dict[str, Any]:
+        """
+        Run evaluator to assess criteria based on evidence.
+        
+        Returns:
+            Evaluation results
+        """
+        self.logger.info("Running evaluator")
+        
+        # Get evaluator configuration from strategy
+        evaluator_config = None
         for agent in self.strategy.get("agents", []):
-            agent_normalized_type = self._normalize_agent_type(agent.get("agent_type", ""))
-            if agent_normalized_type == normalized_agent_type:
-                agent_config = agent
+            if agent.get("agent_type", "").lower() == "evaluator":
+                evaluator_config = agent
                 break
         
-        if not agent_config:
-            # Look for any agent with this base type regardless of specialization
-            for agent in self.strategy.get("agents", []):
-                agent_base_type = self._normalize_agent_type(agent.get("agent_type", ""))
-                if agent_base_type == normalized_agent_type:
-                    agent_config = agent
-                    break
+        if not evaluator_config:
+            self.logger.warning("No evaluator configuration found in strategy, using default")
+            evaluator_config = {
+                "agent_type": "evaluator",
+                "configuration": {
+                    "evaluation_type": "structured",
+                    "confidence_threshold": 0.5,
+                    "infer_missing": True,
+                    "output_format": "scorecard"
+                },
+                "instructions": "Evaluate criteria based on evidence."
+            }
         
-        if not agent_config:
-            raise ValueError(f"Agent type '{agent_type}' not found in strategy")
+        # Create evaluator
+        evaluator = EvaluatorAgent(
+            self.llm,
+            self.context,
+            name="Evaluator",
+            options=evaluator_config
+        )
         
-        # Create agent options
-        agent_options = {
-            **agent_config.get("configuration", {}),
-            "instructions": agent_config.get("instructions", ""),
-            "strategy": self.strategy
-        }
+        # Store agent for later reference
+        self.agents["evaluator"] = evaluator
         
-        # Initialize agent
-        agent = self._create_agent(normalized_agent_type, agent_options)
+        # Process evaluation
+        results = await evaluator.process()
         
-        # Store the agent for later reference
-        self.agents[normalized_agent_type] = agent
+        # Record observation for diagnostics
+        assessment_stats = self.context.get_assessment_stats()
+        self.context.record_agent_observation(
+            "executor", 
+            "evaluation_stats",
+            assessment_stats
+        )
         
-        # Run agent
-        self.logger.info(f"Running {normalized_agent_type} agent")
-        result = await agent.process()
+        self.logger.info(
+            f"Evaluation complete: {assessment_stats.get('assessed_criteria', 0)} criteria assessed, "
+            f"{assessment_stats.get('assessment_coverage', 0):.1%} coverage"
+        )
         
-        # Advanced progress tracking for evaluator
-        if normalized_agent_type == 'evaluator':
-            # Update to dimension summarization phase
-            self.context.set_stage("dimension_summarization")
-            self.context.update_progress(0.5, "Summarizing dimension assessments")
-            
-            # Update to overall assessment phase
-            self.context.set_stage("overall_assessment")
-            self.context.update_progress(0.8, "Generating overall assessment")
-            self.context.complete_stage("overall_assessment", {"result": "success"})
-            
-        # Advanced progress tracking for reporter
-        elif normalized_agent_type == 'reporter':
-            # Update to visualization preparation phase
-            self.context.set_stage("visualization_preparation")
-            self.context.update_progress(0.5, "Preparing data visualizations")
-            
-            # Update to report compilation phase
-            self.context.set_stage("report_compilation")
-            self.context.update_progress(0.8, "Compiling final assessment outputs")
-            self.context.complete_stage("report_compilation", {"result": "success"})
-        else:
-            # Complete the stage using the normalized agent type
-            self.context.complete_stage(f"{normalized_agent_type}_processing", {"result": result})
-        
-        return result
+        return results
     
-    def _normalize_agent_type(self, agent_type: str) -> str:
+    async def _run_reporter(self) -> Dict[str, Any]:
         """
-        Normalize agent type name to handle case differences and specializations.
+        Run reporter to generate assessment reports.
+        
+        Returns:
+            Report results
+        """
+        self.logger.info("Running reporter")
+        
+        # Get reporter configuration from strategy
+        reporter_config = None
+        for agent in self.strategy.get("agents", []):
+            if agent.get("agent_type", "").lower() == "reporter":
+                reporter_config = agent
+                break
+        
+        if not reporter_config:
+            self.logger.warning("No reporter configuration found in strategy, using default")
+            reporter_config = {
+                "agent_type": "reporter",
+                "configuration": {
+                    "report_type": self.options.get("report_type", "scorecard"),
+                    "include_evidence": True,
+                    "include_confidence": True,
+                    "include_assessment_types": True
+                },
+                "instructions": "Create reports from evaluations."
+            }
+        
+        # Create reporter
+        reporter = ReporterAgent(
+            self.llm,
+            self.context,
+            name="Reporter",
+            options=reporter_config
+        )
+        
+        # Store agent for later reference
+        self.agents["reporter"] = reporter
+        
+        # Generate reports
+        results = await reporter.process()
+        
+        self.logger.info("Reports generated successfully")
+        
+        return results
+    
+    async def _format_result_for_ui(
+        self, 
+        evaluation_results: Dict[str, Any],
+        report_results: Dict[str, Any],
+        strategy: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Format results for UI display.
         
         Args:
-            agent_type: Original agent type name
+            evaluation_results: Evaluation results
+            report_results: Report results
+            strategy: Assessment strategy
             
         Returns:
-            Normalized agent type name
+            UI-ready results
         """
-        # Convert to lowercase
-        normalized = agent_type.lower()
-        
-        # Handle special case for criterion-specific extractors
-        if "_processing" in normalized:
-            # These are likely criterion-specific stages, map them to extractor
-            return 'extractor'
-        
-        # Extract base agent type, ignoring specializations in parentheses
-        base_type_match = re.match(r'^(\w+).*$', normalized)
-        if base_type_match:
-            base_type = base_type_match.group(1)
-        else:
-            base_type = normalized
-        
-        # Map to standard agent types
-        if base_type in ['extractor', 'extract']:
-            return 'extractor'
-        elif base_type in ['evaluator', 'evaluate']:
-            return 'evaluator'
-        elif base_type in ['reporter', 'report']:
-            return 'reporter'
-        else:
-            return base_type
-    
-    def _create_agent(self, agent_type: str, options: Dict[str, Any]) -> BaseAgent:
-        """
-        Create an agent instance with the enhanced agent classes.
-        
-        Args:
-            agent_type: Type of agent to create
-            options: Agent configuration options
-            
-        Returns:
-            Agent instance
-        """
-        # Map normalized agent type to agent class
-        if agent_type == 'extractor':
-            return ExtractorAgent(self.llm, self.context, options=options)
-        elif agent_type == 'evaluator':
-            return EvaluatorAgent(self.llm, self.context, options=options)
-        elif agent_type == 'reporter':
-            return ReporterAgent(self.llm, self.context, options=options)
-        else:
-            raise ValueError(f"Unsupported agent type: {agent_type}")
-    
-    async def _format_result_for_ui(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Format raw assessment result for UI display, utilizing enhanced reporter capabilities.
-        
-        Args:
-            raw_result: Raw assessment result from context
-            
-        Returns:
-            UI-ready assessment result with standardized structure
-        """
-        # Use ReporterAgent's format_for_ui method if available
-        if 'reporter' in self.agents:
-            reporter_agent = self.agents['reporter']
-            if hasattr(reporter_agent, 'format_for_ui'):
+        # Check if reporter has format_for_ui method
+        if "reporter" in self.agents:
+            reporter = self.agents["reporter"]
+            if hasattr(reporter, "format_for_ui"):
                 try:
-                    ui_result = await reporter_agent.format_for_ui()
+                    ui_result = await reporter.format_for_ui()
                     
                     # Add strategy information
-                    ui_result["strategy"] = self.strategy
+                    ui_result["strategy"] = strategy
+                    
+                    # Add diagnostics
+                    ui_result["diagnostics"] = self.diagnostics
                     
                     return ui_result
                 except Exception as e:
                     self.logger.error(f"Error using reporter's format_for_ui: {str(e)}")
                     # Fall back to manual formatting
         
-        # Fallback: manual formatting
+        # Fallback: manually format results
         
-        # Check if a reporter has been run and its results are in the raw_result
-        reports_data = {}
-        if "reports" in raw_result:
-            reports_data = raw_result.get("reports", {})
-        elif hasattr(self.context, "data") and "reports" in self.context.data:
-            reports_data = self.context.data.get("reports", {})
+        # Use reports format if available
+        if "formats" in report_results:
+            ui_result = {
+                "scorecard": report_results.get("formats", {}).get("scorecard", {}),
+                "reports": report_results,
+                "metadata": report_results.get("metadata", {}),
+                "statistics": self.context.get_assessment_stats(),
+                "warnings": self.context.data.get("operations", {}).get("warnings", []),
+                "errors": self.context.data.get("operations", {}).get("errors", []),
+                "strategy": strategy
+            }
+        else:
+            # Basic format if reports not available
+            ui_result = {
+                "scorecard": evaluation_results,
+                "reports": {
+                    "formats": {
+                        "scorecard": evaluation_results
+                    }
+                },
+                "metadata": {},
+                "statistics": self.context.get_assessment_stats(),
+                "warnings": self.context.data.get("operations", {}).get("warnings", []),
+                "errors": self.context.data.get("operations", {}).get("errors", []),
+                "strategy": strategy
+            }
         
-        # Construct scorecard
-        scorecard = self._extract_scorecard(raw_result)
-        
-        # Create visualization data
-        visualization_data = self._create_visualization_data(raw_result)
-        
-        # Create evidence report if evidence exists
-        evidence_report = self._create_evidence_report(raw_result) if raw_result.get("evidence") else None
-        
-        # Build UI-ready format
-        ui_result = {
-            # Top-level scorecard for easy access
-            "scorecard": scorecard,
-            
-            # Reports section with all formats
-            "reports": {
-                "formats": {
-                    "scorecard": scorecard,
-                    "visualization_data": visualization_data
-                }
-            },
-            
-            # Metadata
-            "metadata": raw_result.get("metadata", {}),
-            
-            # Statistics
-            "statistics": raw_result.get("statistics", {}),
-            
-            # Include warnings/errors
-            "warnings": raw_result.get("warnings", []),
-            "errors": raw_result.get("errors", []),
-            
-            # Include strategy
-            "strategy": self.strategy
-        }
-        
-        # Add evidence report if available
-        if evidence_report:
-            ui_result["reports"]["formats"]["evidence_report"] = evidence_report
-        
-        # Add any reports from the reporter if they exist
-        for report_type, report_data in reports_data.get("formats", {}).items():
-            if report_type not in ui_result["reports"]["formats"]:
-                ui_result["reports"]["formats"][report_type] = report_data
+        # Add diagnostics
+        ui_result["diagnostics"] = self.diagnostics
         
         return ui_result
-
-    def _extract_scorecard(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract scorecard from raw_result, checking multiple possible locations."""
-        # Check several possible locations for the scorecard
-        if "reports" in raw_result:
-            if "formats" in raw_result["reports"] and "scorecard" in raw_result["reports"]["formats"]:
-                return raw_result["reports"]["formats"]["scorecard"]
-            elif "scorecard" in raw_result["reports"]:
-                return raw_result["reports"]["scorecard"]
-        
-        # Fall back to constructing a scorecard from dimensions and overall assessment
-        return self._construct_scorecard_from_raw_result(raw_result)
-        
-    def _construct_scorecard_from_raw_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Construct a scorecard from raw assessment result.
-        
-        Args:
-            result: Raw assessment result
-            
-        Returns:
-            Structured scorecard for UI display
-        """
-        # Get overall assessment
-        overall_assessment = result.get("overall_assessment", {})
-        
-        # Initialize dimensions list for scorecard
-        dimensions = []
-        
-        # Process each dimension
-        assessments = result.get("assessments", {})
-        for dimension_id, dimension_data in assessments.items():
-            if dimension_id == "overall_assessment":
-                continue
-                
-            # Get dimension metadata
-            dimension_name = dimension_id
-            for dim in result.get("framework", {}).get("dimensions", []):
-                if dim.get("id") == dimension_id:
-                    dimension_name = dim.get("name", dimension_id)
-                    break
-            
-            # Get dimension summary
-            dimension_summary = dimension_data.get("summary", {})
-            if not dimension_summary:
-                continue
-                
-            # Initialize criteria list for this dimension
-            criteria = []
-            
-            # Process each criterion
-            criteria_assessments = dimension_data.get("criteria", {})
-            for criterion_id, criterion_data in criteria_assessments.items():
-                if criterion_data.get("rating") is None:
-                    continue
-                    
-                # Find criterion name
-                criterion_name = criterion_id
-                for dim in result.get("framework", {}).get("dimensions", []):
-                    if dim.get("id") == dimension_id:
-                        for crit in dim.get("criteria", []):
-                            if crit.get("id") == criterion_id:
-                                criterion_name = crit.get("name", criterion_id)
-                                break
-                
-                # Get assessment type
-                assessment_type = criterion_data.get("assessment_type", "direct")
-                
-                # Create criterion entry
-                criterion_entry = {
-                    "id": criterion_id,
-                    "name": criterion_name,
-                    "rating": criterion_data.get("rating"),
-                    "rationale": criterion_data.get("rationale", ""),
-                    "confidence": criterion_data.get("confidence"),
-                    "assessment_type": assessment_type
-                }
-                
-                # Mark inferred assessments explicitly
-                if assessment_type == "inferred" and not criterion_entry["rationale"].startswith("[INFERRED]"):
-                    criterion_entry["rationale"] = f"[INFERRED] {criterion_entry['rationale']}"
-                
-                # Get evidence
-                evidence_ids = criterion_data.get("evidence_ids", [])
-                if evidence_ids:
-                    evidence_items = []
-                    for evidence_id in evidence_ids:
-                        if evidence_id in result.get("evidence", {}).get("items", {}):
-                            evidence_items.append(result["evidence"]["items"][evidence_id])
-                    
-                    if evidence_items:
-                        criterion_entry["evidence"] = evidence_items
-                        criterion_entry["evidence_count"] = len(evidence_items)
-                
-                criteria.append(criterion_entry)
-            
-            # Add dimension entry
-            dimension_entry = {
-                "id": dimension_id,
-                "name": dimension_name,
-                "average_rating": dimension_summary.get("average_rating"),
-                "criteria": criteria,
-                "strengths": dimension_summary.get("strengths", []),
-                "weaknesses": dimension_summary.get("weaknesses", [])
-            }
-            
-            dimensions.append(dimension_entry)
-        
-        # Get assessment type distribution
-        assessment_types = {"direct": 0, "inferred": 0, "insufficient_evidence": 0}
-        for dimension in dimensions:
-            for criterion in dimension.get("criteria", []):
-                assessment_type = criterion.get("assessment_type", "direct")
-                assessment_types[assessment_type] = assessment_types.get(assessment_type, 0) + 1
-        
-        # Calculate assessment reliability
-        total_assessed = sum(assessment_types.values())
-        direct_percentage = assessment_types.get("direct", 0) / max(1, total_assessed) if total_assessed > 0 else 0
-        
-        # Create scorecard
-        scorecard = {
-            "title": f"Assessment Scorecard: {result.get('framework', {}).get('name', 'Assessment')}",
-            "overall_rating": overall_assessment.get("average_rating"),
-            "executive_summary": overall_assessment.get("executive_summary", ""),
-            "key_strengths": overall_assessment.get("key_strengths", []),
-            "key_improvements": overall_assessment.get("key_improvements", []),
-            "recommendations": overall_assessment.get("recommendations", []),
-            "dimensions": dimensions,
-            "criteria_coverage": overall_assessment.get("criteria_coverage", 0),
-            "timestamp": overall_assessment.get("timestamp"),
-            "assessment_types": assessment_types,
-            "direct_assessment_percentage": direct_percentage,
-            "assessment_reliability": self._calculate_reliability_rating(direct_percentage)
-        }
-        
-        return scorecard
     
-    def _calculate_reliability_rating(self, direct_percentage: float) -> str:
-        """
-        Calculate a reliability rating based on the percentage of direct assessments.
-        
-        Args:
-            direct_percentage: Percentage of criteria with direct assessments
-            
-        Returns:
-            Reliability rating (High, Medium, Low)
-        """
-        if direct_percentage >= 0.8:
-            return "High"
-        elif direct_percentage >= 0.5:
-            return "Medium"
-        else:
-            return "Low"
+    def stop_timer(self):
+        """Stop execution timer for diagnostics."""
+        self.diagnostics["execution_end"] = time.time()
+        self.diagnostics["execution_time"] = self.diagnostics["execution_end"] - self.diagnostics["execution_start"]
     
-    def _create_visualization_data(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    def _is_extractor(self, agent_type: str) -> bool:
         """
-        Create visualization data from raw assessment result.
+        Check if an agent type is an extractor.
         
         Args:
-            result: Raw assessment result
+            agent_type: Agent type string
             
         Returns:
-            Visualization data for UI display
+            True if agent is an extractor
         """
-        # Get framework info
-        framework = result.get("framework", {})
-        framework_name = framework.get("name", "Assessment Framework")
-        
-        # Get overall assessment
-        overall_assessment = result.get("overall_assessment", {})
-        
-        # Generate radar chart data (dimension ratings)
-        radar_data = []
-        rating_distribution = {}
-        evidence_distribution = []
-        
-        # Process dimensions
-        for dimension_id, dimension_data in result.get("assessments", {}).items():
-            if dimension_id == "overall_assessment":
-                continue
-                
-            # Get dimension metadata
-            dimension_name = dimension_id
-            for dim in framework.get("dimensions", []):
-                if dim.get("id") == dimension_id:
-                    dimension_name = dim.get("name", dimension_id)
-                    break
-            
-            # Get dimension summary
-            dimension_summary = dimension_data.get("summary", {})
-            if dimension_summary and dimension_summary.get("average_rating") is not None:
-                radar_data.append({
-                    "dimension": dimension_name,
-                    "rating": dimension_summary.get("average_rating")
-                })
-            
-            # Count evidence for this dimension
-            dimension_evidence_count = 0
-            for criterion_id, criterion_data in dimension_data.get("criteria", {}).items():
-                # Count evidence
-                evidence_ids = criterion_data.get("evidence_ids", [])
-                dimension_evidence_count += len(evidence_ids)
-                
-                # Add to rating distribution
-                rating = criterion_data.get("rating")
-                if rating is not None:
-                    rating_str = str(rating)
-                    rating_distribution[rating_str] = rating_distribution.get(rating_str, 0) + 1
-            
-            # Add to evidence distribution
-            evidence_distribution.append({
-                "dimension": dimension_name,
-                "evidence_count": dimension_evidence_count
-            })
-        
-        # Create heatmap data with assessment types
-        heatmap_data = []
-        for dimension_id, dimension_data in result.get("assessments", {}).items():
-            if dimension_id == "overall_assessment":
-                continue
-                
-            # Get dimension name
-            dimension_name = dimension_id
-            for dim in framework.get("dimensions", []):
-                if dim.get("id") == dimension_id:
-                    dimension_name = dim.get("name", dimension_id)
-                    break
-            
-            # Process criteria
-            for criterion_id, criterion_data in dimension_data.get("criteria", {}).items():
-                if criterion_data.get("rating") is None:
-                    continue
-                    
-                # Get criterion name
-                criterion_name = criterion_id
-                for dim in framework.get("dimensions", []):
-                    if dim.get("id") == dimension_id:
-                        for crit in dim.get("criteria", []):
-                            if crit.get("id") == criterion_id:
-                                criterion_name = crit.get("name", criterion_id)
-                                break
-                
-                # Get assessment type
-                assessment_type = criterion_data.get("assessment_type", "direct")
-                
-                # Add to heatmap data
-                heatmap_data.append({
-                    "dimension": dimension_name,
-                    "criterion": criterion_name,
-                    "rating": criterion_data.get("rating"),
-                    "confidence": criterion_data.get("confidence"),
-                    "assessment_type": assessment_type,
-                    "is_inferred": assessment_type == "inferred"
-                })
-        
-        # Get assessment type distribution
-        assessment_types = {"direct": 0, "inferred": 0, "insufficient_evidence": 0}
-        for item in heatmap_data:
-            assessment_type = item.get("assessment_type", "direct")
-            assessment_types[assessment_type] = assessment_types.get(assessment_type, 0) + 1
-        
-        # Format as array for visualization
-        assessment_type_distribution = []
-        for atype, count in assessment_types.items():
-            if count > 0:
-                assessment_type_distribution.append({
-                    "type": atype,
-                    "count": count
-                })
-        
-        # Create visualization data
-        visualization_data = {
-            "title": f"Visualization Data: {framework_name}",
-            "overall_rating": overall_assessment.get("average_rating"),
-            "radar_chart": radar_data,
-            "heatmap": heatmap_data,
-            "evidence_distribution": evidence_distribution,
-            "rating_distribution": rating_distribution,
-            "assessment_type_distribution": assessment_type_distribution,
-            "criteria_coverage": {
-                "assessed": overall_assessment.get("criteria_assessed", 0),
-                "total": overall_assessment.get("criteria_total", 1),
-                "percentage": overall_assessment.get("criteria_coverage", 0)
-            },
-            "key_metrics": {
-                "dimensions": len(radar_data),
-                "criteria_assessed": overall_assessment.get("criteria_assessed", 0),
-                "total_evidence": result.get("statistics", {}).get("total_evidence", 0),
-                "average_confidence": result.get("statistics", {}).get("average_confidence"),
-                "direct_assessment_percentage": assessment_types.get("direct", 0) / max(1, sum(assessment_types.values())) if sum(assessment_types.values()) > 0 else 0
-            }
-        }
-        
-        return visualization_data
-    
-    def _create_evidence_report(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create evidence report from raw assessment result with improved categorization.
-        
-        Args:
-            result: Raw assessment result
-            
-        Returns:
-            Evidence report for UI display
-        """
-        # Get framework info
-        framework = result.get("framework", {})
-        framework_name = framework.get("name", "Assessment Framework")
-        
-        # Create evidence map by dimension/criterion
-        evidence_map = {}
-        
-        # Process dimensions
-        for dimension in framework.get("dimensions", []):
-            dimension_id = dimension.get("id", "")
-            dimension_name = dimension.get("name", "")
-            
-            if not dimension_id:
-                continue
-            
-            evidence_map[dimension_id] = {
-                "name": dimension_name,
-                "criteria": {}
-            }
-            
-            # Process criteria
-            for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                criterion_name = criterion.get("name", "")
-                criterion_question = criterion.get("question", "")
-                
-                if not criterion_id:
-                    continue
-                
-                # Get criterion key
-                criterion_key = f"{dimension_id}:{criterion_id}"
-                
-                # Get evidence IDs for this criterion
-                evidence_ids = (
-                    result.get("evidence", {})
-                    .get("by_criterion", {})
-                    .get(criterion_key, [])
-                )
-                
-                if not evidence_ids:
-                    continue
-                
-                # Format evidence items with categories
-                formatted_evidence = []
-                evidence_by_category = {}
-                
-                for evidence_id in evidence_ids:
-                    evidence_item = (
-                        result.get("evidence", {})
-                        .get("items", {})
-                        .get(evidence_id)
-                    )
-                    
-                    if not evidence_item:
-                        continue
-                    
-                    # Get metadata with categories
-                    metadata = evidence_item.get("metadata", {})
-                    relevance_level = metadata.get("relevance_level", "Direct")
-                    sentiment = metadata.get("sentiment", "Neutral")
-                    
-                    # Create formatted evidence
-                    formatted_item = {
-                        "id": evidence_id,
-                        "text": evidence_item.get("text", ""),
-                        "relevance": metadata.get("relevance_explanation", ""),
-                        "confidence": metadata.get("confidence"),
-                        "relevance_level": relevance_level,
-                        "sentiment": sentiment,
-                        "sufficiency": metadata.get("sufficiency_indicator", "Moderate")
-                    }
-                    
-                    formatted_evidence.append(formatted_item)
-                    
-                    # Update category counts
-                    category = f"{relevance_level.lower()}_{sentiment.lower()}"
-                    evidence_by_category[category] = evidence_by_category.get(category, 0) + 1
-                
-                # Create criterion evidence
-                evidence_map[dimension_id]["criteria"][criterion_id] = {
-                    "name": criterion_name,
-                    "question": criterion_question,
-                    "evidence": formatted_evidence,
-                    "evidence_by_category": evidence_by_category
-                }
-        
-        # Get total evidence count
-        total_evidence = sum(
-            len(criterion_data["evidence"]) 
-            for dimension_data in evidence_map.values() 
-            for criterion_data in dimension_data["criteria"].values()
-        )
-        
-        # Create introduction
-        introduction = (
-            f"## Evidence Report for {framework_name}\n\n"
-            f"This report contains {total_evidence} pieces of evidence extracted from the document "
-            f"across {len(evidence_map)} dimensions. Each piece of evidence is linked to specific "
-            f"criteria and includes relevance explanations, sentiment analysis, and confidence scores.\n\n"
-            f"Evidence is organized by dimension and criterion to provide a comprehensive view "
-            f"of how the document addresses each aspect of the assessment framework."
-        )
-        
-        # Create evidence report
-        evidence_report = {
-            "title": f"Evidence Report: {framework_name}",
-            "introduction": introduction,
-            "evidence_map": evidence_map,
-            "total_evidence": total_evidence
-        }
-        
-        return evidence_report
+        return agent_type.lower().startswith("extractor")

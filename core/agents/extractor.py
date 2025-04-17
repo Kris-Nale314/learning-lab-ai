@@ -1,784 +1,463 @@
 """
-Enhanced Extractor Agent - Improved evidence extraction with better relevance categorization
+Streamlined Extractor Agent - Simple two-pass evidence collection
 
-This agent thoroughly analyzes document chunks to find ALL evidence relevant to its
-assigned criteria, with improved relevance categorization and evidence consolidation.
+This agent collects and consolidates evidence for criteria evaluation using a
+straightforward two-pass approach: first collecting evidence from each chunk,
+then creating a single consolidated evidence packet per criterion.
 """
 
 import logging
 import asyncio
-import json
-from typing import Dict, Any, List, Optional, Tuple
+import time
+from typing import Dict, Any, List, Optional, Set
 
 from core.agents.base import BaseAgent
 from core.context import AssessmentContext
 
 class ExtractorAgent(BaseAgent):
     """
-    Enhanced extractor agent with improved evidence categorization and consolidation.
+    Creates consolidated evidence packets for criteria evaluation.
     
-    The Enhanced Extractor is responsible for:
-    1. Deep analysis of all document chunks for assigned criteria
-    2. Finding all potential evidence with better relevance and sentiment categorization
-    3. Consolidating evidence for each criterion across all chunks
-    4. Creating comprehensive evidence summaries with direct/inferred recommendations
-    5. Providing confidence and relevance assessments for the evidence
-    6. Processing chunks in parallel for efficiency
-    7. Delivering a clean "evidence packet" to the evaluator for each criterion
+    Key capabilities:
+    1. First pass: Extract evidence from each document chunk
+    2. Second pass: Consolidate evidence into a single packet per criterion
+    3. Focus on DIRECT QUOTES and METRICS
+    4. Preserve key context for evaluation
     """
     
     def __init__(
         self,
         llm,
         context: AssessmentContext,
-        name: str = "EnhancedExtractor",
+        name: str = "Extractor",
         options: Optional[Dict[str, Any]] = None
     ):
         """
-        Initialize the Enhanced Extractor agent.
+        Initialize the Extractor agent.
         
         Args:
-            llm: Language model instance
+            llm: LLM instance
             context: Assessment context
             name: Agent name
-            options: Configuration options including assigned criteria
+            options: Configuration options including assigned criteria & instructions
         """
         super().__init__(name, "extractor", llm, context, options or {})
         
-        # Get extraction configuration from options
-        self.extraction_type = self.options.get("extraction_type", "direct")
-        self.batch_size = self.options.get("batch_size", 1)
-        self.min_confidence = self.options.get("min_confidence", 0.6)
-        self.custom_instructions = self.options.get("instructions", "")
+        # Configuration
+        self.options = options or {}
+        self.config = options.get("configuration", {})
         
-        # Get assigned criteria (specific to this extractor)
-        self.criteria_ids = self.options.get("criteria_ids", [])
-        self.dimension_ids = self.options.get("dimension_ids", [])
+        # Get instructions from Meta Planner
+        self.instructions = self.options.get("instructions", "")
         
-        # For parallel processing
-        self.max_concurrent = self.options.get("max_concurrent", 3)
+        # Get assigned criteria IDs
+        self.criteria_ids = self.config.get("criteria_ids", [])
+        if not self.criteria_ids:
+            self.logger.warning(f"Extractor '{self.name}' initialized with no assigned criteria_ids!")
         
-        self.logger.info(f"{name} initialized for {len(self.criteria_ids)} criteria")
+        # Get or infer dimension IDs
+        self.dimension_ids = self.config.get("dimension_ids", self._infer_dimension_ids(self.criteria_ids))
         
+        # Concurrency control
+        self.max_concurrent = self.config.get("max_concurrent", 3)
+        
+        # Evidence counters
+        self.chunk_packets_created = 0
+        self.consolidated_packets_created = 0
+
+        self.logger.info(
+            f"Streamlined Extractor '{self.name}' initialized for criteria: {', '.join(self.criteria_ids)}"
+        )
+
+    def _infer_dimension_ids(self, criteria_ids: List[str]) -> List[str]:
+        """Find dimension IDs for given criteria IDs from the framework."""
+        inferred_ids = set()
+        if not hasattr(self.context, 'framework'): 
+            return []
+        
+        framework = self.context.framework
+        for dim in framework.get("dimensions", []):
+            dim_id = dim.get("id")
+            if not dim_id: 
+                continue
+                
+            for crit in dim.get("criteria", []):
+                crit_id = crit.get("id")
+                if crit_id in criteria_ids:
+                    inferred_ids.add(dim_id)
+                    
+        return list(inferred_ids)
+
     async def process(self, chunks: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
-        Process document chunks to extract all evidence for assigned criteria,
-        then consolidate evidence for each criterion across all chunks.
+        Process all chunks for assigned criteria using a two-pass approach.
         
         Args:
             chunks: Optional list of document chunks (uses context chunks if None)
             
         Returns:
-            Extraction results with consolidated evidence summaries
+            Summary of extraction results
         """
-        self.logger.info(f"Starting enhanced evidence extraction for {len(self.criteria_ids)} assigned criteria")
-        self.start_timer()
+        process_start_time = time.time()
+        self.logger.info(f"Starting evidence extraction for {len(self.criteria_ids)} criteria")
         
         try:
             # Use provided chunks or get from context
             chunks_to_process = chunks or self.context.get_chunks()
             
             if not chunks_to_process:
+                self.logger.error("No document chunks available for extraction")
                 raise ValueError("No document chunks available for extraction")
+            
+            self.logger.info(f"Processing document with {len(chunks_to_process)} chunks")
+            
+            # PASS 1: Extract evidence from each chunk for each criterion
+            chunk_evidence_packets = {}  # criterion_id -> [packets]
+            
+            for criterion_id in self.criteria_ids:
+                self.logger.info(f"Processing criterion: {criterion_id}")
                 
-            self.logger.info(f"Processing {len(chunks_to_process)} chunks for evidence extraction")
+                # Get details for this criterion
+                criterion_info = self._get_criterion_details(criterion_id)
+                if not criterion_info:
+                    self.logger.warning(f"Could not find details for criterion: {criterion_id}")
+                    continue
+                    
+                chunk_evidence_packets[criterion_id] = []
+                
+                # Process all chunks for this criterion (with concurrency control)
+                tasks = [
+                    self._extract_evidence_from_chunk(criterion_info, chunk['text'], chunk['chunk_id'])
+                    for chunk in chunks_to_process
+                ]
+                
+                results = await self.run_parallel_tasks(tasks, max_concurrent=self.max_concurrent)
+                
+                # Filter out None results and add successful packets
+                for result in results:
+                    if result and result.get("evidence_found", False):
+                        chunk_evidence_packets[criterion_id].append(result)
+                
+                self.logger.info(
+                    f"Found evidence in {len(chunk_evidence_packets[criterion_id])} chunks for criterion {criterion_id}"
+                )
             
-            # Get assigned criteria details
-            assigned_criteria = self._get_assigned_criteria()
+            # PASS 2: Consolidate evidence for each criterion
+            consolidated_results = {}
             
-            if not assigned_criteria:
-                self.logger.warning(f"No criteria found matching assigned IDs: {self.criteria_ids}")
-                return {"by_chunk": {}, "by_criterion": {}, "total_evidence": 0, "consolidated_evidence": {}}
+            for criterion_id, packets in chunk_evidence_packets.items():
+                # Get criterion details
+                criterion_info = self._get_criterion_details(criterion_id)
+                if not criterion_info:
+                    continue
+                
+                # Handle case with no evidence found
+                if not packets:
+                    self.logger.info(f"No evidence found for criterion: {criterion_id}")
+                    
+                    # Create empty packet
+                    self._create_empty_evidence_packet(criterion_info)
+                    
+                    consolidated_results[criterion_id] = {
+                        "evidence_found": False,
+                        "packets_consolidated": 0
+                    }
+                    continue
+                
+                # Consolidate evidence from all chunks
+                consolidated_packet = await self._consolidate_evidence(criterion_info, packets)
+                
+                # Store consolidated packet in context
+                evidence_id = self.add_evidence(
+                    dimension_id=criterion_info['dimension_id'],
+                    criterion_id=criterion_id,
+                    text=consolidated_packet['text'],
+                    metadata={
+                        "source_agent": self.name,
+                        "packet_type": "consolidated",
+                        "evidence_found": consolidated_packet['evidence_found'],
+                        "chunk_count": len(packets),
+                        "confidence": 0.9  # High confidence in consolidated packet
+                    }
+                )
+                
+                if evidence_id:
+                    self.consolidated_packets_created += 1
+                    
+                    consolidated_results[criterion_id] = {
+                        "evidence_found": consolidated_packet['evidence_found'],
+                        "packets_consolidated": len(packets)
+                    }
+                else:
+                    self.logger.error(f"Failed to store consolidated packet for criterion: {criterion_id}")
             
-            # Process chunks in parallel for assigned criteria
-            extraction_results = await self._process_chunks_in_parallel(chunks_to_process, assigned_criteria)
+            # Create result summary
+            elapsed_time = time.time() - process_start_time
             
-            # Consolidate evidence for each criterion
-            consolidated_evidence = await self._consolidate_evidence(extraction_results, assigned_criteria)
-            extraction_results["consolidated_evidence"] = consolidated_evidence
+            summary = {
+                "status": "completed",
+                "criteria_processed": len(self.criteria_ids),
+                "chunk_packets_created": self.chunk_packets_created,
+                "consolidated_packets_created": self.consolidated_packets_created,
+                "processing_time": elapsed_time,
+                "results_by_criterion": consolidated_results
+            }
             
-            # Record processing time
-            elapsed_time = self.stop_timer()
-            self.logger.info(f"Enhanced evidence extraction completed in {elapsed_time:.2f}s")
+            self.logger.info(
+                f"Extraction completed in {elapsed_time:.2f}s. "
+                f"Created {self.consolidated_packets_created} consolidated packets "
+                f"from {self.chunk_packets_created} chunk packets."
+            )
             
-            # Record observation
-            self.record_observation("extraction_completed", {
-                "chunks_processed": len(chunks_to_process),
-                "evidence_extracted": extraction_results.get("total_evidence", 0),
-                "criteria_processed": len(assigned_criteria),
-                "time_taken": elapsed_time,
-                "consolidated_evidence": consolidated_evidence
-            })
-            
-            return extraction_results
+            return summary
             
         except Exception as e:
-            self.stop_timer()
             self.logger.error(f"Error during evidence extraction: {str(e)}", exc_info=True)
-            self.add_warning(f"Failed to extract evidence: {str(e)}")
-            raise
-    
-    def _get_assigned_criteria(self) -> List[Dict[str, Any]]:
-        """
-        Get details for the criteria assigned to this extractor.
-        
-        Returns:
-            List of criteria details
-        """
-        assigned_criteria = []
+            self.context.add_warning(f"Extractor '{self.name}' failed: {str(e)}")
+            
+            # Return error summary
+            return {
+                "status": "failed",
+                "error": str(e),
+                "processing_time": time.time() - process_start_time
+            }
+
+    def _get_criterion_details(self, criterion_id: str) -> Optional[Dict[str, Any]]:
+        """Get details for a criterion from the framework."""
+        if not hasattr(self.context, 'framework'):
+            return None
+            
         framework = self.context.framework
         
         for dimension in framework.get("dimensions", []):
             dimension_id = dimension.get("id", "")
             dimension_name = dimension.get("name", "")
             
-            # Skip dimensions that aren't assigned to this extractor
-            if self.dimension_ids and dimension_id not in self.dimension_ids:
+            if not dimension_id or dimension_id not in self.dimension_ids:
                 continue
                 
             for criterion in dimension.get("criteria", []):
-                criterion_id = criterion.get("id", "")
-                
-                # Only include criteria assigned to this extractor
-                if not self.criteria_ids or criterion_id in self.criteria_ids:
-                    assigned_criteria.append({
+                if criterion.get("id") == criterion_id:
+                    return {
                         "dimension_id": dimension_id,
                         "dimension_name": dimension_name,
                         "criterion_id": criterion_id,
                         "criterion_name": criterion.get("name", ""),
                         "criterion_question": criterion.get("question", ""),
-                        "scoring_method": criterion.get("scoring_method", "scale_1_5"),
+                        "scoring_method": criterion.get("scoring_method", "unknown"),
                         "scoring_definitions": criterion.get("scoring_definitions", {})
-                    })
-        
-        return assigned_criteria
-    
-    async def _process_chunks_in_parallel(
-        self, 
-        chunks: List[Dict[str, Any]], 
-        assigned_criteria: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Process chunks in parallel for efficiency.
-        
-        Args:
-            chunks: List of document chunks
-            assigned_criteria: List of criteria to extract evidence for
-            
-        Returns:
-            Extraction results
-        """
-        results = {
-            "by_chunk": {},
-            "by_criterion": {},
-            "total_evidence": 0
-        }
-        
-        # Divide chunks into batches if needed
-        chunk_batches = [chunks[i:i+self.batch_size] for i in range(0, len(chunks), self.batch_size)]
-        total_batches = len(chunk_batches)
-        
-        self.logger.info(f"Processing {total_batches} chunk batches with max concurrency {self.max_concurrent}")
-        
-        # Create processing tasks for each batch
-        tasks = []
-        for i, batch in enumerate(chunk_batches):
-            task = self._process_chunk_batch(batch, assigned_criteria, f"batch_{i}")
-            tasks.append(task)
-        
-        # Process batches with concurrency control
-        batch_results = await self.run_parallel_tasks(tasks, self.max_concurrent)
-        
-        # Aggregate results
-        for batch_result in batch_results:
-            if not batch_result:
-                continue
-                
-            # Update by_chunk results
-            for chunk_id, chunk_data in batch_result.get("by_chunk", {}).items():
-                results["by_chunk"][chunk_id] = chunk_data
-            
-            # Update by_criterion results
-            for criterion_key, evidence_list in batch_result.get("by_criterion", {}).items():
-                if criterion_key not in results["by_criterion"]:
-                    results["by_criterion"][criterion_key] = []
-                results["by_criterion"][criterion_key].extend(evidence_list)
-            
-            # Update total evidence count
-            results["total_evidence"] += batch_result.get("total_evidence", 0)
-        
-        return results
-    
-    async def _process_chunk_batch(
-        self, 
-        chunks: List[Dict[str, Any]], 
-        assigned_criteria: List[Dict[str, Any]],
-        batch_id: str
-    ) -> Dict[str, Any]:
-        """
-        Process a batch of chunks for assigned criteria.
-        
-        Args:
-            chunks: Batch of document chunks
-            assigned_criteria: Criteria to extract evidence for
-            batch_id: Identifier for this batch
-            
-        Returns:
-            Batch extraction results
-        """
-        batch_results = {
-            "by_chunk": {},
-            "by_criterion": {},
-            "total_evidence": 0
-        }
-        
-        for chunk in chunks:
-            chunk_id = chunk.get("chunk_id")
-            
-            if not chunk_id:
-                continue
-                
-            # Process chunk for assigned criteria
-            chunk_results = await self._extract_evidence_for_chunk(chunk, assigned_criteria)
-            
-            # Record chunk results
-            batch_results["by_chunk"][chunk_id] = chunk_results
-            batch_results["total_evidence"] += chunk_results.get("evidence_count", 0)
-            
-            # Update criterion-indexed results
-            for evidence in chunk_results.get("evidence", []):
-                dimension_id = evidence.get("dimension_id")
-                criterion_id = evidence.get("criterion_id")
-                
-                if dimension_id and criterion_id:
-                    key = f"{dimension_id}:{criterion_id}"
-                    if key not in batch_results["by_criterion"]:
-                        batch_results["by_criterion"][key] = []
-                    batch_results["by_criterion"][key].append(evidence)
-        
-        self.logger.debug(f"Batch {batch_id} processed: {batch_results['total_evidence']} evidence items found")
-        return batch_results
-    
-    async def _extract_evidence_for_chunk(
-        self, 
-        chunk: Dict[str, Any], 
-        assigned_criteria: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Extract all evidence for assigned criteria from a single chunk.
-        
-        Args:
-            chunk: Document chunk
-            assigned_criteria: Criteria to extract evidence for
-            
-        Returns:
-            Chunk extraction results
-        """
-        chunk_id = chunk.get("chunk_id")
-        chunk_text = chunk.get("text", "")
-        
-        # Prepare system and human prompts
-        system_prompt = """You are an expert evidence extractor specialized in finding ALL relevant evidence for specific criteria. 
-Your job is to thoroughly analyze text and identify any content that could be relevant to the assigned criteria, 
-including direct statements, indirect references, implications, and contextual information.
-Be comprehensive and catch everything that might be relevant."""
-        
-        # Add custom instructions if provided
-        if self.custom_instructions:
-            system_prompt += f"\n\nADDITIONAL INSTRUCTIONS:\n{self.custom_instructions}"
-        
-        # Format criteria for the prompt with detailed scoring information
-        criteria_text = ""
-        for criterion in assigned_criteria:
-            criteria_text += f"CRITERION: {criterion['criterion_name']}\n"
-            criteria_text += f"QUESTION: {criterion['criterion_question']}\n"
-            criteria_text += f"DIMENSION: {criterion['dimension_name']}\n"
-            
-            # Add scoring definitions to help with relevance determination
-            if criterion['scoring_definitions']:
-                criteria_text += "SCORING LEVELS:\n"
-                for score, definition in criterion['scoring_definitions'].items():
-                    criteria_text += f"- Level {score}: {definition}\n"
-            
-            criteria_text += "\n"
-        
-        human_prompt = f"""Extract ALL evidence from the following text chunk that relates to the assigned criteria.
-
-TEXT CHUNK:
-{chunk_text}
-
-ASSIGNED CRITERIA:
-{criteria_text}
-
-For each piece of evidence you find, provide:
-1. The criterion ID it relates to
-2. The dimension ID it belongs to
-3. The exact text passage that constitutes evidence (direct quote)
-4. An explanation of why this is relevant to the criterion
-5. A confidence score (0.0-1.0) indicating how strongly this relates to the criterion
-6. The relevance level:
-   - Direct: Explicitly addresses the criterion
-   - Indirect: Implicitly relates to the criterion
-   - Contextual: Provides important context for understanding
-   - Implied: Suggests something about the criterion without stating it
-7. The sentiment of this evidence:
-   - Positive: Supports a positive assessment of the criterion
-   - Negative: Indicates a deficiency or problem
-   - Neutral: Factual or balanced information
-8. Sufficiency indicator - how strongly this single piece of evidence could support a rating:
-   - Strong: Could substantially influence a rating on its own
-   - Moderate: Contributes meaningfully but needs corroboration
-   - Weak: Minor support that primarily adds context
-
-Be thorough - extract ANY text that might be relevant, even indirectly.
-Format your response as a structured list of evidence items."""
-
-        # Define the evidence output schema
-        evidence_schema = {
-            "type": "object",
-            "properties": {
-                "evidence": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "dimension_id": {"type": "string"},
-                            "criterion_id": {"type": "string"},
-                            "text": {"type": "string"},
-                            "relevance_explanation": {"type": "string"},
-                            "confidence": {"type": "number"},
-                            "relevance_level": {"type": "string", "enum": ["Direct", "Indirect", "Contextual", "Implied"]},
-                            "sentiment": {"type": "string", "enum": ["Positive", "Negative", "Neutral"]},
-                            "sufficiency_indicator": {"type": "string", "enum": ["Strong", "Moderate", "Weak"]}
-                        },
-                        "required": ["dimension_id", "criterion_id", "text", "relevance_explanation", "confidence"]
                     }
-                }
-            },
-            "required": ["evidence"]
-        }
         
-        # Call LLM for extraction using cached call for efficiency
-        cache_key = f"extract_evidence_{chunk_id}"
-        extracted_evidence = await self._cached_llm_call(
-            "extract_evidence",
-            f"{chunk_id}_{','.join(c['criterion_id'] for c in assigned_criteria)}",
-            "generate_structured_output",
-            prompt=human_prompt,
-            output_schema=evidence_schema,
-            system_prompt=system_prompt,
-            temperature=0.2,
-            max_tokens=2000
-        )
-        
-        # Process and record evidence
-        evidence_list = []
-        if isinstance(extracted_evidence, dict) and "evidence" in extracted_evidence:
-            evidence_list = extracted_evidence["evidence"]
-        recorded_evidence = []
-        
-        for evidence_item in evidence_list:
-            dimension_id = evidence_item.get("dimension_id")
-            criterion_id = evidence_item.get("criterion_id")
-            text = evidence_item.get("text", "").strip()
-            relevance_explanation = evidence_item.get("relevance_explanation", "")
-            confidence = evidence_item.get("confidence", 0.8)  # Default if not provided
-            relevance_level = evidence_item.get("relevance_level", "Direct")
-            sentiment = evidence_item.get("sentiment", "Neutral")
-            sufficiency_indicator = evidence_item.get("sufficiency_indicator", "Moderate")
-            
-            if not dimension_id or not criterion_id or not text:
-                self.logger.warning(f"Skipping invalid evidence item: {evidence_item}")
-                continue
-                
-            # Skip low-confidence evidence if threshold is set
-            if confidence < self.min_confidence:
-                self.logger.debug(f"Skipping low-confidence evidence ({confidence}) for {dimension_id}:{criterion_id}")
-                continue
-                
-            # Add evidence to context
-            metadata = {
-                "extraction_type": self.extraction_type,
-                "relevance_explanation": relevance_explanation,
-                "confidence": confidence,
-                "relevance_level": relevance_level,
-                "sentiment": sentiment,
-                "sufficiency_indicator": sufficiency_indicator
-            }
-            
-            # Find location in chunk if possible
-            location = None
-            text_start = chunk_text.find(text)
-            if text_start >= 0:
-                chunk_start = chunk.get("span", {}).get("start", 0) if "span" in chunk else 0
-                absolute_start = chunk_start + text_start
-                absolute_end = absolute_start + len(text)
-                location = {
-                    "start": absolute_start,
-                    "end": absolute_end,
-                    "relative_start": text_start,
-                    "relative_end": text_start + len(text)
-                }
-            
-            evidence_id = self.add_evidence(
-                dimension_id=dimension_id,
-                criterion_id=criterion_id,
-                text=text,
-                chunk_id=chunk_id,
-                location=location,
-                metadata=metadata
-            )
-            
-            # Add to results
-            recorded_evidence.append({
-                "evidence_id": evidence_id,
-                "dimension_id": dimension_id,
-                "criterion_id": criterion_id,
-                "text": text,
-                "relevance_explanation": relevance_explanation,
-                "confidence": confidence,
-                "relevance_level": relevance_level,
-                "sentiment": sentiment,
-                "sufficiency_indicator": sufficiency_indicator,
-                "metadata": metadata
-            })
-        
-        return {
-            "evidence": recorded_evidence,
-            "evidence_count": len(recorded_evidence),
-            "chunk_id": chunk_id
-        }
-    
-    async def _consolidate_evidence(
+        return None
+
+    async def _extract_evidence_from_chunk(
         self, 
-        extraction_results: Dict[str, Any], 
-        assigned_criteria: List[Dict[str, Any]]
-    ) -> Dict[str, Dict[str, Any]]:
+        criterion_info: Dict[str, Any],
+        chunk_text: str,
+        chunk_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Consolidate evidence for each criterion across all chunks,
-        creating a comprehensive evidence summary with direct/inferred recommendation.
+        Extract evidence for a criterion from a single chunk.
         
         Args:
-            extraction_results: Results from evidence extraction
-            assigned_criteria: List of assigned criteria
+            criterion_info: Criterion details
+            chunk_text: Text of the chunk
+            chunk_id: Optional chunk identifier
             
         Returns:
-            Consolidated evidence summaries for each criterion
+            Evidence packet dictionary or None if extraction failed
         """
-        consolidated_evidence = {}
+        criterion_id = criterion_info["criterion_id"]
+        criterion_name = criterion_info["criterion_name"]
+        criterion_question = criterion_info["criterion_question"]
         
-        self.update_progress(0.9, "Consolidating evidence for criteria")
-        self.logger.info("Starting evidence consolidation for each criterion")
-        
-        # Process each criterion
-        for criterion in assigned_criteria:
-            criterion_id = criterion.get("criterion_id")
-            dimension_id = criterion.get("dimension_id")
-            
-            # Get all evidence for this criterion
-            key = f"{dimension_id}:{criterion_id}"
-            evidence_list = extraction_results.get("by_criterion", {}).get(key, [])
-            
-            # Create consolidated evidence summary
-            if evidence_list:
-                # Group evidence by relevance and sentiment
-                grouped_evidence = {
-                    "direct": {
-                        "positive": [],
-                        "negative": [],
-                        "neutral": []
-                    },
-                    "indirect": {
-                        "positive": [],
-                        "negative": [],
-                        "neutral": []
-                    },
-                    "contextual_implied": []
-                }
-                
-                # Sort evidence into groups
-                for evidence in evidence_list:
-                    relevance = evidence.get("relevance_level", "Direct")
-                    sentiment = evidence.get("sentiment", "Neutral")
-                    
-                    if relevance in ["Contextual", "Implied"]:
-                        grouped_evidence["contextual_implied"].append(evidence)
-                    elif relevance in ["Direct", "Indirect"]:
-                        normalized_relevance = relevance.lower()
-                        normalized_sentiment = sentiment.lower()
-                        # Make sure dictionary keys exist
-                        if normalized_sentiment not in grouped_evidence.get(normalized_relevance, {}):
-                            if normalized_relevance not in grouped_evidence:
-                                grouped_evidence[normalized_relevance] = {}
-                            grouped_evidence[normalized_relevance][normalized_sentiment] = []
-                        grouped_evidence[normalized_relevance][normalized_sentiment].append(evidence)
-                
-                # Create consolidated summary
-                summary = await self._create_consolidated_evidence_summary(evidence_list, criterion, grouped_evidence)
-                
-                consolidated_evidence[key] = {
-                    "dimension_id": dimension_id,
-                    "criterion_id": criterion_id,
-                    "evidence_count": len(evidence_list),
-                    "comprehensive_analysis": summary.get("comprehensive_analysis", ""),
-                    "key_patterns": summary.get("key_patterns", []),
-                    "contradictions": summary.get("contradictions", []),
-                    "direct_assessment_justified": summary.get("direct_assessment_justified", "NO"),
-                    "suggested_rating_range": summary.get("suggested_rating_range", ""),
-                    "confidence_level": summary.get("confidence_level", 0.5),
-                    "evidence_by_category": self._get_evidence_category_counts(grouped_evidence),
-                    "evidence_items": evidence_list
-                }
-                
-                self.logger.info(f"Consolidated {len(evidence_list)} evidence items for {key}")
-            else:
-                # No evidence found
-                consolidated_evidence[key] = {
-                    "dimension_id": dimension_id,
-                    "criterion_id": criterion_id,
-                    "evidence_count": 0,
-                    "comprehensive_analysis": "No evidence found for this criterion.",
-                    "direct_assessment_justified": "NO",
-                    "evidence_by_category": {},
-                    "evidence_items": []
-                }
-                
-                self.logger.info(f"No evidence found for {key}")
-        
-        self.update_progress(1.0, "Evidence consolidation complete")
-        
-        return consolidated_evidence
-    
-    def _get_evidence_category_counts(self, grouped_evidence: Dict[str, Any]) -> Dict[str, int]:
-        """
-        Get counts of evidence by category for reporting.
-        
-        Args:
-            grouped_evidence: Evidence grouped by relevance and sentiment
-            
-        Returns:
-            Dictionary of evidence counts by category
-        """
-        counts = {}
-        
-        # Count direct evidence by sentiment
-        for sentiment in ["positive", "negative", "neutral"]:
-            direct_count = len(grouped_evidence.get("direct", {}).get(sentiment, []))
-            if direct_count > 0:
-                counts[f"direct_{sentiment}"] = direct_count
-        
-        # Count indirect evidence by sentiment
-        for sentiment in ["positive", "negative", "neutral"]:
-            indirect_count = len(grouped_evidence.get("indirect", {}).get(sentiment, []))
-            if indirect_count > 0:
-                counts[f"indirect_{sentiment}"] = indirect_count
-        
-        # Count contextual/implied evidence
-        contextual_implied_count = len(grouped_evidence.get("contextual_implied", []))
-        if contextual_implied_count > 0:
-            counts["contextual_implied"] = contextual_implied_count
-        
-        # Add total counts
-        counts["total"] = (
-            sum(len(items) for sentiment, items in grouped_evidence.get("direct", {}).items()) +
-            sum(len(items) for sentiment, items in grouped_evidence.get("indirect", {}).items()) +
-            len(grouped_evidence.get("contextual_implied", []))
-        )
-        
-        return counts
-    
-    async def _create_consolidated_evidence_summary(
-        self, 
-        evidence_list: List[Dict[str, Any]], 
-        criterion: Dict[str, Any],
-        grouped_evidence: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Create a comprehensive summary of all evidence for a criterion with
-        a recommendation on whether direct assessment is justified.
-        
-        Args:
-            evidence_list: List of all evidence items for the criterion
-            criterion: Criterion information
-            grouped_evidence: Evidence grouped by relevance and sentiment
-            
-        Returns:
-            Comprehensive evidence summary with assessment recommendation
-        """
-        # Format evidence for each group
-        direct_positive = self._format_evidence_group(
-            grouped_evidence.get("direct", {}).get("positive", [])
-        )
-        direct_negative = self._format_evidence_group(
-            grouped_evidence.get("direct", {}).get("negative", [])
-        )
-        direct_neutral = self._format_evidence_group(
-            grouped_evidence.get("direct", {}).get("neutral", [])
-        )
-        indirect_positive = self._format_evidence_group(
-            grouped_evidence.get("indirect", {}).get("positive", [])
-        )
-        indirect_negative = self._format_evidence_group(
-            grouped_evidence.get("indirect", {}).get("negative", [])
-        )
-        indirect_neutral = self._format_evidence_group(
-            grouped_evidence.get("indirect", {}).get("neutral", [])
-        )
-        contextual_implied = self._format_evidence_group(
-            grouped_evidence.get("contextual_implied", [])
-        )
-        
-        # Counts for each category
-        direct_count = (
-            len(grouped_evidence.get("direct", {}).get("positive", [])) +
-            len(grouped_evidence.get("direct", {}).get("negative", [])) +
-            len(grouped_evidence.get("direct", {}).get("neutral", []))
-        )
-        indirect_count = (
-            len(grouped_evidence.get("indirect", {}).get("positive", [])) +
-            len(grouped_evidence.get("indirect", {}).get("negative", [])) +
-            len(grouped_evidence.get("indirect", {}).get("neutral", []))
-        )
-        contextual_implied_count = len(grouped_evidence.get("contextual_implied", []))
-        
-        # Format the criterion information
-        criterion_name = criterion.get("criterion_name", "")
-        criterion_question = criterion.get("criterion_question", "")
-        dimension_name = criterion.get("dimension_name", "")
-        
-        # Format scoring definitions
-        scoring_definitions = criterion.get("scoring_definitions", {})
-        scoring_text = ""
-        for score, definition in scoring_definitions.items():
-            scoring_text += f"- Score {score}: {definition}\n"
-        
-        # Create prompt for the comprehensive analysis
-        prompt = f"""Create a comprehensive analysis of all evidence related to the following criterion:
+        try:
+            # Create a prompt that encourages detailed evidence extraction
+            prompt = f"""Extract evidence from this document chunk to assess this criterion:
 
 CRITERION: {criterion_name}
 QUESTION: {criterion_question}
-DIMENSION: {dimension_name}
 
-EVIDENCE SUMMARY:
-- Direct Evidence: {direct_count} items
-- Indirect Evidence: {indirect_count} items
-- Contextual/Implied Evidence: {contextual_implied_count} items
-- Total Evidence: {len(evidence_list)} items
+Find ALL relevant evidence in this document chunk. Focus on EXACT QUOTES and METRICS.
 
-DIRECT POSITIVE EVIDENCE ({len(grouped_evidence.get("direct", {}).get("positive", []))}):
-{direct_positive}
+DOCUMENT CHUNK:
+{chunk_text}
 
-DIRECT NEGATIVE EVIDENCE ({len(grouped_evidence.get("direct", {}).get("negative", []))}):
-{direct_negative}
+Format your response as a detailed evidence packet:
 
-DIRECT NEUTRAL EVIDENCE ({len(grouped_evidence.get("direct", {}).get("neutral", []))}):
-{direct_neutral}
+===== EVIDENCE PACKET FOR: {criterion_name} =====
 
-INDIRECT POSITIVE EVIDENCE ({len(grouped_evidence.get("indirect", {}).get("positive", []))}):
-{indirect_positive}
+DIRECT QUOTES:
+- [List exact quotes that directly address this criterion]
 
-INDIRECT NEGATIVE EVIDENCE ({len(grouped_evidence.get("indirect", {}).get("negative", []))}):
-{indirect_negative}
+KEY METRICS:
+- [List any numbers, percentages, or quantitative data related to this criterion]
 
-INDIRECT NEUTRAL EVIDENCE ({len(grouped_evidence.get("indirect", {}).get("neutral", []))}):
-{indirect_neutral}
+RELEVANCE ANALYSIS:
+[Explain how this evidence relates to the criterion. Be specific about why each quote or metric is relevant.]
 
-CONTEXTUAL/IMPLIED EVIDENCE ({contextual_implied_count}):
-{contextual_implied}
+ASSESSMENT IMPLICATION:
+[Indicate what this evidence suggests about a potential rating]
 
-SCORING DEFINITIONS:
-{scoring_text}
+If you find NO relevant evidence in this chunk, clearly state "NO RELEVANT EVIDENCE FOUND" in each section.
+"""
 
-Provide a comprehensive analysis that:
-1. Synthesizes what the evidence collectively indicates about this criterion
-2. Evaluates the strength and quality of evidence for making an assessment
-3. Identifies key patterns and themes across the evidence
-4. Notes any contradictions or tensions in the evidence
-5. Recommends whether a direct assessment is justified based on evidence (YES/NO/MAYBE)
-6. Suggests what rating range (if any) the evidence best supports
+            # Custom additional instructions from meta planner if available
+            if self.instructions:
+                prompt += f"\n\nADDITIONAL GUIDANCE:\n{self.instructions}"
 
-Your comprehensive analysis:"""
-        
-        # Define schema for structured output
-        summary_schema = {
-            "type": "object",
-            "properties": {
-                "comprehensive_analysis": {"type": "string"},
-                "key_patterns": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
-                "contradictions": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                },
-                "direct_assessment_justified": {"type": "string", "enum": ["YES", "NO", "MAYBE"]},
-                "suggested_rating_range": {"type": "string"},
-                "confidence_level": {"type": "number"}
-            },
-            "required": ["comprehensive_analysis", "direct_assessment_justified"]
-        }
-        
-        # Get summary using structured output call
-        system_prompt = """You are an expert evidence analyst creating comprehensive evidence summaries.
-Your job is to synthesize all available evidence for a criterion into a clear, balanced analysis
-that will help an evaluator determine if a direct rating is possible or if inference is needed.
-
-Be careful with your recommendation about direct assessment:
-- Use "YES" only when there is substantial direct evidence that clearly supports a specific rating
-- Use "MAYBE" when there is some evidence but it's mixed or not entirely conclusive
-- Use "NO" when there is insufficient evidence to make a direct assessment
-
-Be objective and evidence-based in your analysis."""
-        
-        # Optimize the prompt if it's very large
-        optimized_prompt = self.optimize_prompt(prompt, 6000)
-        
-        # Call LLM for the summary
-        try:
-            summary = await self._structured_output_call(
-                prompt=optimized_prompt,
-                output_schema=summary_schema,
-                system_prompt=system_prompt,
-                temperature=0.3
+            # Call LLM
+            evidence_text, _ = await self.llm.generate_completion(
+                prompt=prompt,
+                temperature=0.2,
+                max_tokens=2000
             )
             
-            return summary
+            # Check if evidence was found or not
+            no_evidence_indicators = [
+                "no relevant evidence found",
+                "no direct quotes found",
+                "no key metrics found",
+                "no evidence found"
+            ]
+            
+            evidence_found = True
+            for indicator in no_evidence_indicators:
+                if indicator in evidence_text.lower():
+                    evidence_found = False
+                    break
+            
+            # Only store evidence packets with content to save context space
+            if evidence_found:
+                self.chunk_packets_created += 1
+                
+                packet = {
+                    "text": evidence_text,
+                    "chunk_id": chunk_id,
+                    "evidence_found": True
+                }
+                
+                return packet
+            else:
+                # Return None for chunks with no evidence
+                return None
+                
         except Exception as e:
-            self.logger.error(f"Error creating evidence summary: {str(e)}")
-            # Return minimal valid structure
-            return {
-                "comprehensive_analysis": "Error creating comprehensive analysis.",
-                "key_patterns": [],
-                "contradictions": [],
-                "direct_assessment_justified": "NO",
-                "suggested_rating_range": "",
-                "confidence_level": 0.0
+            self.logger.error(
+                f"Error extracting evidence for criterion {criterion_id} from chunk {chunk_id}: {str(e)}"
+            )
+            return None
+
+    def _create_empty_evidence_packet(self, criterion_info: Dict[str, Any]) -> str:
+        """Create an empty evidence packet for a criterion with no evidence."""
+        criterion_id = criterion_info["criterion_id"]
+        criterion_name = criterion_info["criterion_name"]
+        
+        empty_packet = f"""===== EVIDENCE PACKET FOR: {criterion_name} =====
+
+DIRECT QUOTES:
+NO RELEVANT QUOTES FOUND
+
+KEY METRICS:
+NO RELEVANT METRICS FOUND
+
+RELEVANCE ANALYSIS:
+No relevant evidence was found in the document for this criterion.
+
+ASSESSMENT IMPLICATION:
+Insufficient evidence to make an assessment on this criterion.
+"""
+        
+        # Store empty packet in context
+        evidence_id = self.add_evidence(
+            dimension_id=criterion_info['dimension_id'],
+            criterion_id=criterion_id,
+            text=empty_packet,
+            metadata={
+                "source_agent": self.name,
+                "packet_type": "empty",
+                "evidence_found": False,
+                "confidence": 0.0
             }
-    
-    def _format_evidence_group(self, evidence_group: List[Dict[str, Any]]) -> str:
+        )
+        
+        if evidence_id:
+            self.consolidated_packets_created += 1
+            
+        return empty_packet
+
+    async def _consolidate_evidence(
+        self, 
+        criterion_info: Dict[str, Any],
+        packets: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
-        Format a group of evidence items for the summary prompt.
+        Consolidate evidence from multiple chunk packets into a single master packet.
         
         Args:
-            evidence_group: List of evidence items in this group
+            criterion_info: Criterion details
+            packets: List of evidence packets from individual chunks
             
         Returns:
-            Formatted evidence text
+            Consolidated evidence packet
         """
-        if not evidence_group:
-            return "None"
+        criterion_id = criterion_info["criterion_id"]
+        criterion_name = criterion_info["criterion_name"]
+        criterion_question = criterion_info["criterion_question"]
         
-        formatted = ""
-        for i, evidence in enumerate(evidence_group):
-            text = evidence.get("text", "")
-            relevance_explanation = evidence.get("relevance_explanation", "")
-            confidence = evidence.get("confidence", 0.8)
-            sufficiency = evidence.get("sufficiency_indicator", "Moderate")
-            
-            formatted += f"Evidence {i+1}: {text}\n"
-            formatted += f"Relevance: {relevance_explanation}\n"
-            formatted += f"Confidence: {confidence}\n"
-            formatted += f"Sufficiency: {sufficiency}\n\n"
+        # Create a simple formatted text with all evidence
+        all_evidence_texts = []
+        for i, packet in enumerate(packets):
+            all_evidence_texts.append(f"EVIDENCE FROM CHUNK {i+1}:\n{packet['text']}\n")
         
-        return formatted
+        combined_evidence = "\n".join(all_evidence_texts)
+        
+        # Create consolidation prompt
+        prompt = f"""Create a CONSOLIDATED evidence packet for this criterion:
+
+CRITERION: {criterion_name}
+QUESTION: {criterion_question}
+
+Below are evidence packets collected from different chunks of the document:
+
+{combined_evidence}
+
+Your task is to create ONE CLEAR AND COMPELLING consolidated evidence packet that:
+
+1. Combines all relevant evidence from the different chunks
+2. Eliminates redundancies and duplications
+3. Organizes the evidence logically
+4. Preserves the most important direct quotes and metrics
+5. Provides a unified analysis of what the evidence suggests about this criterion
+
+Format your response as:
+
+===== CONSOLIDATED EVIDENCE PACKET FOR: {criterion_name} =====
+
+DIRECT QUOTES:
+- [List the most relevant exact quotes, eliminating duplicates]
+
+KEY METRICS:
+- [List the most significant numbers, metrics, and quantitative data]
+
+RELEVANCE ANALYSIS:
+[Provide a unified explanation of how all this evidence relates to the criterion]
+
+ASSESSMENT IMPLICATION:
+[Indicate what the combined evidence suggests about a potential rating]
+
+Focus on QUALITY over quantity. Select the strongest and most relevant evidence.
+"""
+
+        # Call LLM for consolidation
+        consolidated_text, _ = await self.llm.generate_completion(
+            prompt=prompt,
+            temperature=0.3,
+            max_tokens=3000
+        )
+        
+        return {
+            "text": consolidated_text,
+            "evidence_found": True,
+            "packets_consolidated": len(packets)
+        }

@@ -4,27 +4,19 @@
 
 ## 🔍 What is this?
 
-The Framework Assessment Workbench is an experimental laboratory for transforming unstructured documents into structured insights using advanced document intelligence techniques. It evaluates content against structured criteria you define, going beyond simple keyword search to provide comprehensive framework-guided assessment.
+The Framework Assessment Workbench is my experimental lab for transforming unstructured documents into structured insights. It evaluates content against assessment frameworks using a streamlined multi-agent approach, going beyond simple keyword matching to provide comprehensive, evidence-based assessments.
 
 <p align="center">
   <img src="docs/images/screenLab1.png" alt="Learning Lab AI Interface" width="80%"/>
 </p>
 
-## 💡 Strategic Design Philosophy
+## 💡 Why I Built This
 
-This project demonstrates how effective AI systems should be built to deliver sustainable value:
+I believe the most valuable AI systems are ones that enhance human decision-making rather than trying to replace it. This workbench demonstrates several principles I'm passionate about:
 
-### 🎯 Decision Enhancement, Not Just Automation
-AI systems create the most value when enhancing human decision-making rather than simply automating processes. This workbench:
-- Augments analytical capabilities while preserving human judgment
-- Creates multi-resolution information layers matching how people make decisions
-- Makes assessment frameworks explicit and modifiable to preserve domain expertise
-
-### 🌱 Design for Evolution, Not Static Deployment
-Effective AI systems must evolve continuously as technology and requirements change:
-- Components can be independently upgraded through modular architecture 
-- Processing strategies adapt dynamically to different document types
-- Experimentation interface allows comparing approaches to optimize results
+1. **Evidence-Based Assessment** - Explicit traceability from conclusions back to source text
+2. **Human-AI Collaboration** - Augmenting analytical capabilities while preserving human judgment
+3. **Practical Experimentation** - Learning through building, not just theorizing
 
 ## 🏗️ Technical Architecture: Strategic Multi-Agent Orchestration
 
@@ -35,122 +27,68 @@ Effective AI systems must evolve continuously as technology and requirements cha
 ### Key Components
 
 #### 🤖 Meta Planner Agent
-- Analyzes document structure, content, and framework complexity
-- Designs custom processing strategy including:
-  - Optimal chunking method (fixed, semantic, paragraph-based)
-  - Extractor configuration and specialization
-  - Evidence categorization criteria
-  - Processing sequence and dependencies
+- Analyzes document structure and framework complexity
+- Generates targeted evidence extraction instructions
+- Identifies related criteria for combined evaluation
+- Designs optimal chunking and processing strategies
 
-#### 🧠 Shared Context Protocol
-- Central collaboration mechanism for all agents
-- Evidence traceability from conclusions back to source
-- Token usage optimization across processing steps
-- Transparent agent collaboration and decision records
+#### 🔍 Streamlined Extractor Agent
+- Two-pass evidence collection approach:
+  - First pass: Extract evidence from each document chunk
+  - Second pass: Consolidate into comprehensive evidence packets
+- Clear focus on direct quotes and metrics
+- Produces one consolidated evidence packet per criterion
 
-#### 🔍 Specialized Extractors
-- Configurable extraction techniques (direct, semantic, inference-based)
-- Evidence categorization with relevance and sentiment analysis
-- Confidence scoring for extracted evidence
-- Parallel processing with specialized focus areas
+#### ⚖️ Enhanced Evaluator Agent
+- Processes consolidated evidence packets
+- Distinguishes between direct and inferred assessments
+- Can evaluate related criteria together for consistency
+- Provides confidence scores and clear rationales
 
-#### ⚖️ Enhanced Evaluator
-- Direct vs. inferred assessment distinction
-- Evidence-based confidence calibration
-- Rating justification with traceability
-- Dimension and cross-criteria insights
+#### 📊 Reporter Agent
+- Transforms evaluations into structured reports
+- Creates visualizations and exportable formats
+- Maintains traceability from assessments to evidence
 
-## 🛠️ Technical Innovations
+## 🔬 Innovative Approaches
 
-### Evidence Categorization Matrix
+### Consolidated Evidence Packets
 
-The system implements sophisticated evidence categorization beyond binary relevance:
+Instead of fragmenting evidence across multiple small items, the system creates comprehensive evidence packets with a clear structure:
 
-| Relevance Level | Description | Assessment Impact |
-|-----------------|-------------|-------------------|
-| **Direct** | Explicitly addresses the criterion | Strongest weight in assessment |
-| **Indirect** | Implicitly relates to the criterion | Moderate weight in assessment |
-| **Contextual** | Provides important context | Supplementary information |
-| **Implied** | Suggests without stating | Weak inference support |
+```
+===== EVIDENCE PACKET FOR: [Criterion Name] =====
 
-Combined with sentiment analysis, this creates rich evidence classification for confident assessments.
+DIRECT QUOTES:
+- Exact statements from the document
 
-### Dynamic Chunking Strategy
+KEY METRICS:
+- Numerical data and measurements
 
-Different documents require different chunking approaches:
+RELEVANCE ANALYSIS:
+- Explanation of how the evidence relates to the criterion
 
-```python
-def _design_chunking_strategy(self, document_size: int, document_analysis: Dict[str, Any]) -> Dict[str, Any]:
-    """Design optimal chunking strategy based on document characteristics."""
-    # Default configuration
-    strategy = {
-        "method": "fixed_size",
-        "size": 8000,
-        "overlap": 200,
-        "rationale": "Standard fixed-size chunking for general documents"
-    }
-    
-    # Adjust based on document size
-    if document_size < 15000:
-        # Small document - use a single large chunk
-        strategy["method"] = "fixed_size"
-        strategy["size"] = document_size
-        strategy["overlap"] = 0
-        strategy["rationale"] = "Document is small enough to process as a single chunk"
-    elif document_size > 100000:
-        # Very large document - use semantic chunking
-        strategy["method"] = "semantic"
-        strategy["rationale"] = "Large document requires semantic chunking to maintain context"
-    else:
-        # Check document structure
-        structure = document_analysis.get("content_structure", "").lower()
-        
-        if "dialogue" in structure or "transcript" in structure:
-            # Dialogue or transcript - use paragraph-based chunking
-            strategy["method"] = "paragraph"
-            strategy["rationale"] = "Dialogue structure benefits from paragraph-based chunking"
-            
-    return strategy
+ASSESSMENT IMPLICATION:
+- What the evidence suggests about rating
 ```
 
-### Direct vs. Inferred Assessment Protocol
+This approach preserves context and makes assessment more reliable.
 
-One of the most significant innovations is explicit handling of assessment types:
+### Combined Criterion Evaluation
 
-```python
-async def _evaluate_criterion(self, dimension_id: str, criterion: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Evaluate a criterion with clear distinction between direct and inferred assessments."""
-    # Get consolidated evidence
-    consolidated_evidence = self._get_consolidated_evidence(dimension_id, criterion_id)
-    
-    # Check if direct assessment is justified
-    if consolidated_evidence and consolidated_evidence.get("direct_assessment_justified") == "YES":
-        # Create direct assessment
-        assessment = await self._create_evidence_based_assessment(
-            dimension_id, criterion, consolidated_evidence
-        )
-        assessment["assessment_type"] = "direct"
-        
-    # If inference is allowed but direct not justified
-    elif self.infer_missing:
-        # Create inferred assessment
-        assessment = await self._create_inferred_assessment(
-            dimension_id, criterion, consolidated_evidence
-        )
-        if assessment:
-            assessment["assessment_type"] = "inferred"
-            
-    # No assessment possible
-    else:
-        assessment = {
-            "assessment_type": "insufficient_evidence",
-            "rating": None
-        }
-        
-    return assessment
-```
+The evaluator can process related criteria together, ensuring consistency in assessments:
 
-This distinction is critical for transparency about assessment reliability.
+1. Identify related criteria within dimensions
+2. Evaluate criteria groups with a holistic view
+3. Ensure calibrated ratings across similar criteria
+
+### LLM-Optimized Prompting
+
+Instead of complex code, the system uses simple but effective prompts to guide the LLM:
+
+- Clear, non-technical instructions
+- Consistent output formats
+- Focused queries that leverage LLM strengths
 
 ## 🚀 Getting Started
 
@@ -169,24 +107,15 @@ export OPENAI_API_KEY=your_key_here
 streamlit run app.py
 ```
 
-## 🔬 Experimentation Capabilities
-
-The workbench allows you to experiment with different approaches:
-
-- **Extraction Strategies**: Compare direct vs. semantic extraction techniques
-- **Chunking Approaches**: Test impact of chunk size and overlap on assessment quality
-- **Evaluation Methods**: Compare direct vs. inference-based assessment
-- **Token Optimization**: Explore efficiency tradeoffs in processing strategies
-
 ## 💼 Real-World Applications
 
 ### Organizational Assessment
 - Evaluate documents against maturity models or compliance frameworks
-- Identify gaps and strengths in organizational documentation
-- Automate consistency checks in complex regulations
+- Identify gaps in organizational documentation
+- Automate consistency checks across complex regulations
 
 ### Meeting Analysis
-- Analyze transcripts against agenda frameworks
+- Analyze earnings call transcripts against assessment criteria
 - Verify that all required topics were addressed
 - Identify missing discussion points for follow-up
 
@@ -197,15 +126,14 @@ The workbench allows you to experiment with different approaches:
 
 ## 🧪 Why I Build Experimental AI Systems
 
-Building systems like this workbench provides insights that can't be gained from theory alone:
+Building hands-on systems like this provides insights that can't be gained from theory alone:
 
-1. **Emergent Challenges**: Complex issues only become visible during implementation
-2. **Architecture Testing**: Understanding real-world performance of different patterns
-3. **Integration Learning**: Discovering how components interact in unexpected ways
-4. **Practical Limits**: Finding boundaries of what current LLM technology can achieve
-5. **User Experience**: Learning how humans interact with AI-generated assessments
+1. **Practical Limitations** - Discovering where current LLM capabilities truly shine or struggle
+2. **Architecture Testing** - Understanding how different system designs perform in real-world scenarios
+3. **Integration Learning** - Finding unexpected interactions between components
+4. **User Experience** - Learning how humans interact with AI-generated assessments
 
-> "The difference between theory and practice is greater in practice than in theory."
+> "The gap between theory and implementation is where the most valuable lessons hide."
 
 ## 📝 License
 
@@ -213,4 +141,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*The Framework Assessment Workbench is an experimental tool designed to explore advanced document intelligence techniques and demonstrate strategic AI system design principles.*
+*The Framework Assessment Workbench is an experimental tool designed to explore practical multi-agent orchestration and document intelligence techniques. It's a work in progress, continuously evolving as I experiment with different approaches.*
