@@ -10,6 +10,9 @@ import logging
 import json
 import asyncio
 import time
+import os
+from datetime import datetime, timezone
+import re
 from typing import Dict, Any, List, Optional, Tuple, Type, Set, Union
 
 # Import agents
@@ -160,13 +163,18 @@ class StrategyExecutor:
         
         Args:
             strategy: Optional strategy to use (if not provided, uses the result of plan())
-            
+                
         Returns:
             UI-ready assessment results
         """
+        # Initialize result tracking
+        execution_start = time.time()
+        evaluation_results = {}
+        report_results = {}
+        evidence_count = 0
+        
         try:
             self.logger.info("Starting assessment execution")
-            execution_start = time.time()
             
             # Begin with document analysis stage
             self.context.set_stage("document_analysis")
@@ -227,33 +235,51 @@ class StrategyExecutor:
             
             # Run extractors with evidence packets
             self.context.set_stage("evidence_extraction")
-            extraction_results = await self._run_extractors_with_packets(evidence_packets, chunks)
-            
-            # Check evidence flow
-            evidence_count = self.context.get_evidence_count()
-            self.logger.info(f"Evidence count after extraction: {evidence_count}")
-            
-            # Track evidence by criteria for diagnostics
-            evidence_by_criteria = self._track_evidence_by_criteria()
-            self.logger.info(f"Criteria with evidence: {len(evidence_by_criteria)}")
-            
-            # Add diagnostic checkpoint
-            self.diagnostics["evidence_checks"].append({
-                "stage": "after_extraction",
-                "time": time.time() - execution_start,
-                "total_evidence": evidence_count,
-                "criteria_with_evidence": len(evidence_by_criteria)
-            })
-            
-            # Complete extraction stage
-            self.context.complete_stage("evidence_extraction", {
-                "total_evidence": evidence_count,
-                "criteria_with_evidence": len(evidence_by_criteria)
-            })
+            try:
+                extraction_results = await self._run_extractors_with_packets(evidence_packets, chunks)
+                
+                # Check evidence flow
+                evidence_count = self.context.get_evidence_count()
+                self.logger.info(f"Evidence count after extraction: {evidence_count}")
+                
+                # Track evidence by criteria for diagnostics
+                evidence_by_criteria = self._track_evidence_by_criteria()
+                self.logger.info(f"Criteria with evidence: {len(evidence_by_criteria)}")
+                
+                # Add diagnostic checkpoint
+                self.diagnostics["evidence_checks"].append({
+                    "stage": "after_extraction",
+                    "time": time.time() - execution_start,
+                    "total_evidence": evidence_count,
+                    "criteria_with_evidence": len(evidence_by_criteria)
+                })
+                
+                # Complete extraction stage
+                self.context.complete_stage("evidence_extraction", {
+                    "total_evidence": evidence_count,
+                    "criteria_with_evidence": len(evidence_by_criteria)
+                })
+            except Exception as e:
+                self.logger.error(f"Evidence extraction failed: {str(e)}", exc_info=True)
+                self.context.fail_stage("evidence_extraction", f"Error: {str(e)}")
+                self.context.add_warning(f"Evidence extraction failed: {str(e)}")
+                # Continue with evaluation even if extraction had issues
             
             # Run evaluator
             self.context.set_stage("criterion_evaluation")
-            evaluation_results = await self._run_evaluator()
+            try:
+                evaluation_results = await self._run_evaluator()
+                self.context.complete_stage("criterion_evaluation", {"result": "success"})
+            except Exception as e:
+                self.logger.error(f"Evaluator failed: {str(e)}", exc_info=True)
+                self.context.fail_stage("criterion_evaluation", f"Error: {str(e)}")
+                self.context.add_warning(f"Evaluator failed: {str(e)}")
+                # Create minimal evaluation results to continue
+                evaluation_results = {
+                    "status": "failed",
+                    "error": str(e),
+                    "message": "Evaluation failed, but continuing with available data"
+                }
             
             # Update to dimension summarization phase
             self.context.set_stage("dimension_summarization")
@@ -262,38 +288,52 @@ class StrategyExecutor:
             # Update to overall assessment phase
             self.context.set_stage("overall_assessment")
             self.context.update_progress(0.8, "Generating overall assessment")
-            self.context.complete_stage("overall_assessment", {"result": "success"})
             
-            # Check assessment counts
-            assessment_stats = self.context.get_assessment_stats()
-            self.logger.info(
-                f"Assessment stats: {assessment_stats.get('assessed_criteria', 0)} criteria assessed, "
-                f"{assessment_stats.get('assessment_coverage', 0):.1%} coverage"
-            )
-            
-            # Add diagnostic checkpoint
-            self.diagnostics["evidence_checks"].append({
-                "stage": "after_evaluation",
-                "time": time.time() - execution_start,
-                "assessed_criteria": assessment_stats.get("assessed_criteria", 0),
-                "coverage": assessment_stats.get("assessment_coverage", 0)
-            })
+            # Try to get assessment stats
+            try:
+                assessment_stats = self.context.get_assessment_stats()
+                assessed_criteria_count = assessment_stats.get("assessed_criteria", 0)
+                assessment_coverage = assessment_stats.get("assessment_coverage", 0)
+                self.logger.info(
+                    f"Assessment stats: {assessed_criteria_count} criteria assessed, "
+                    f"{assessment_coverage:.1%} coverage"
+                )
+                
+                # Add diagnostic checkpoint
+                self.diagnostics["evidence_checks"].append({
+                    "stage": "after_evaluation",
+                    "time": time.time() - execution_start,
+                    "assessed_criteria": assessed_criteria_count,
+                    "coverage": assessment_coverage
+                })
+                
+                self.context.complete_stage("overall_assessment", {"result": "success"})
+            except Exception as e:
+                self.logger.error(f"Error getting assessment stats: {str(e)}")
+                self.context.add_warning(f"Error getting assessment stats: {str(e)}")
             
             # Run reporter
             self.context.set_stage("report_generation")
-            report_results = await self._run_reporter()
+            try:
+                report_results = await self._run_reporter()
+                self.context.complete_stage("report_generation", {"result": "success"})
+            except Exception as e:
+                self.logger.error(f"Reporter failed: {str(e)}", exc_info=True)
+                self.context.fail_stage("report_generation", f"Error: {str(e)}")
+                self.context.add_warning(f"Reporter failed: {str(e)}")
+                # Create minimal report results to continue
+                report_results = {
+                    "status": "failed",
+                    "error": str(e),
+                    "formats": {}
+                }
             
             # Update to report compilation phase
             self.context.set_stage("report_compilation")
             self.context.update_progress(0.9, "Compiling final assessment outputs")
-            self.context.complete_stage("report_compilation", {"result": "success"})
             
-            # Format for UI display
-            ui_result = await self._format_result_for_ui(
-                evaluation_results, 
-                report_results,
-                self.strategy
-            )
+            # Create consolidated output
+            ui_result = self._consolidate_results(evaluation_results, report_results, self.strategy)
             
             # Final diagnostic check
             final_evidence = self.context.get_evidence_count()
@@ -303,27 +343,133 @@ class StrategyExecutor:
             execution_time = time.time() - execution_start
             self.logger.info(f"Assessment execution completed in {execution_time:.2f}s with {final_evidence} evidence items")
             
-            # Add final diagnostics
+            # Add diagnostics to result
             ui_result["diagnostics"] = self.diagnostics
             
-            return ui_result
+            # Complete final stage
+            self.context.complete_stage("report_compilation", {"result": "success"})
             
+            return ui_result
+                
         except Exception as e:
             self.stop_timer()
             self.logger.error(f"Error during assessment execution: {str(e)}", exc_info=True)
             
-            # Create error result
-            error_result = {
-                "error": str(e),
-                "status": "failed",
-                "scorecard": {},
-                "reports": {"formats": {}},
-                "warnings": self.context.data.get("operations", {}).get("warnings", []),
-                "errors": self.context.data.get("operations", {}).get("errors", []) + [{"message": str(e), "stage": "execution"}],
-                "diagnostics": self.diagnostics
-            }
+            # Create error result using consistent format
+            error_result = self._consolidate_results(
+                evaluation_results or {},
+                report_results or {},
+                self.strategy or {}
+            )
+            
+            # Add error information
+            error_result["status"] = "failed"
+            error_result["error"] = str(e)
+            error_result["diagnostics"] = self.diagnostics
             
             return error_result
+
+    def _consolidate_results(self, evaluation_results, report_results, strategy):
+        """
+        Consolidate all results into a single, consistent output structure.
+        This ensures we only have ONE output format regardless of how we got there.
+        """
+        # Start with a clean base structure
+        final_result = {
+            "scorecard": {},
+            "reports": {"formats": {}},
+            "metadata": {},
+            "statistics": {},
+            "warnings": [],
+            "errors": [],
+            "strategy": strategy or {}
+        }
+        
+        # Get basic assessment stats if available
+        try:
+            final_result["statistics"] = self.context.get_assessment_stats()
+        except Exception as e:
+            self.logger.warning(f"Could not get assessment stats: {str(e)}")
+            # Create minimal stats
+            final_result["statistics"] = {
+                "total_criteria": 0,
+                "assessed_criteria": 0,
+                "assessment_coverage": 0,
+                "assessment_types": {"direct": 0, "inferred": 0, "insufficient_evidence": 0}
+            }
+        
+        # Try different sources for the scorecard
+        if report_results and "formats" in report_results and "scorecard" in report_results["formats"]:
+            # Reporter produced a scorecard - use it as primary
+            final_result["scorecard"] = report_results["formats"]["scorecard"]
+            final_result["reports"]["formats"]["scorecard"] = report_results["formats"]["scorecard"]
+        elif isinstance(evaluation_results, dict) and evaluation_results:
+            # Use evaluator results if available
+            final_result["scorecard"] = evaluation_results
+            final_result["reports"]["formats"]["scorecard"] = evaluation_results
+        
+        # Add other report formats if available
+        if report_results and "formats" in report_results:
+            for format_name, format_data in report_results["formats"].items():
+                if format_name != "scorecard" or "scorecard" not in final_result["reports"]["formats"]:
+                    final_result["reports"]["formats"][format_name] = format_data
+        
+        # Add metadata
+        try:
+            # Try to get metadata from context
+            if hasattr(self.context, "get_final_result"):
+                context_result = self.context.get_final_result()
+                if "metadata" in context_result:
+                    final_result["metadata"] = context_result["metadata"]
+            
+            # Fall back to basic metadata if needed
+            if not final_result["metadata"]:
+                final_result["metadata"] = {
+                    "framework_id": self.context.framework.get("id", "unknown"),
+                    "framework_name": self.context.framework.get("name", "Unknown Framework"),
+                    "document_name": self.context.options.get("document_name", "Unknown Document"),
+                    "document_type": self.document.document_type,
+                    "entity_name": self.document.primary_entity.get("name", "unknown"),
+                    "entity_type": self.document.primary_entity.get("type", "unknown"),
+                    "generated_at": datetime.now(timezone.utc).isoformat()
+                }
+        except Exception as e:
+            self.logger.warning(f"Error generating metadata: {str(e)}")
+        
+        # Include warnings and errors
+        try:
+            final_result["warnings"] = self.context.data.get("operations", {}).get("warnings", [])
+            final_result["errors"] = self.context.data.get("operations", {}).get("errors", [])
+        except Exception as e:
+            self.logger.warning(f"Error retrieving warnings/errors: {str(e)}")
+
+        # Ensure assessment types match rationales
+        if "scorecard" in final_result and "dimensions" in final_result["scorecard"]:
+            for dimension in final_result["scorecard"]["dimensions"]:
+                if "criteria" in dimension:
+                    for criterion in dimension["criteria"]:
+                        # Check for inferred rationales with incorrect assessment types
+                        if "rationale" in criterion and "assessment_type" in criterion:
+                            if (criterion["rationale"].startswith("[INFERRED]") and 
+                                criterion["assessment_type"] != "inferred"):
+                                criterion["assessment_type"] = "inferred"
+                                self.logger.info(
+                                    f"Fixed assessment type for criterion {criterion.get('id', 'unknown')}: "
+                                    f"Changed to 'inferred' based on rationale starting with [INFERRED]"
+                                )
+                        
+                        # CRITICAL FIX: Handle None ratings to prevent format errors
+                        if "rating" in criterion and criterion["rating"] is None:
+                            # Set assessment_type to insufficient_evidence if not already set
+                            if "assessment_type" not in criterion or criterion["assessment_type"] == "direct":
+                                criterion["assessment_type"] = "insufficient_evidence"
+                                self.logger.info(
+                                    f"Updated assessment_type for criterion {criterion.get('id', 'unknown')} "
+                                    f"with None rating to 'insufficient_evidence'"
+                                )
+        
+        return final_result
+
     
     def _get_evidence_packets_from_observations(self) -> List[Dict[str, Any]]:
         """

@@ -1,8 +1,8 @@
 """
-01_Assess_Framework - Enhanced assessment page for Framework Assessment Workbench
+01_Framework_Assessment - Streamlined assessment page for Framework Assessment Workbench
 
-This is the primary page for assessing documents against frameworks using
-the enhanced multi-agent architecture with semantic awareness and professional UI.
+This page provides a clean, consistent interface for assessing documents against frameworks,
+with proper error handling and result display.
 """
 
 import os
@@ -13,7 +13,8 @@ import streamlit as st
 import time
 import pandas as pd
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Union
 
 # Ensure core modules are in path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,69 +42,377 @@ st.set_page_config(
 # Apply custom styles
 ui_styles.apply_styles()
 
-async def run_assessment(document, framework, options):
+def main():
+    """Main application function for framework assessment."""
+    # Page header
+    st.title("🧠 Framework Assessment")
+    st.markdown(
+        """
+        Assess a document against a structured framework using our AI system. 
+        The system will analyze your document, extract relevant evidence, and provide a structured assessment 
+        with clear distinction between direct and inferred findings.
+        """
+    )
+    
+    # Check for API key
+    if not hasattr(st.session_state, "api_key") or not st.session_state.api_key:
+        st.warning(
+            "OpenAI API key not found. Please add it to your .env file "
+            "or configure it in the app settings."
+        )
+        return
+    
+    # Initialize tabs for workflow
+    tabs = st.tabs(["Assess New Document", "View Previous Assessments"])
+    
+    with tabs[0]:
+        # Framework selection
+        framework = display_framework_selection()
+        
+        # Document upload
+        document = display_document_upload()
+        
+        # Assessment options
+        options = display_assessment_options()
+        
+        # Add assessment button and handle assessment process
+        start_col, _ = st.columns([1, 3])
+        with start_col:
+            start_assessment = st.button(
+                "Start Assessment", 
+                key="start_assessment_btn", 
+                type="primary", 
+                disabled=not (framework and document),
+                help="Start the assessment process",
+                use_container_width=True
+            )
+        
+        if start_assessment:
+            if not framework:
+                st.error("Please select a framework before starting assessment.")
+                return
+                
+            if not document:
+                st.error("Please upload or paste a document before starting assessment.")
+                return
+            
+            # Create a container for progress tracking
+            progress_container = st.container()
+            with progress_container:
+                st.markdown("### Assessment Progress")
+                
+                # Create a progress tracker
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # Run assessment process
+                try:
+                    # Define a helper function to run the async code
+                    def run_async_assessment():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            return loop.run_until_complete(
+                                perform_assessment(
+                                    document, 
+                                    framework, 
+                                    options, 
+                                    progress_callback=lambda p, msg: update_progress(progress_bar, status_text, p, msg)
+                                )
+                            )
+                        finally:
+                            loop.close()
+                    
+                    # Run the async function
+                    assessment_result = run_async_assessment()
+                    
+                    # Store result in session state for later access
+                    st.session_state.assessment_result = assessment_result
+                    
+                    # Display results
+                    with st.container():
+                        display_assessment_results(assessment_result)
+                    
+                except Exception as e:
+                    st.error(f"Assessment failed: {str(e)}")
+                    # Clear progress indicators
+                    progress_bar.empty()
+                    status_text.empty()
+        
+        # Display previously computed results if available
+        elif hasattr(st.session_state, "assessment_result"):
+            display_assessment_results(st.session_state.assessment_result)
+    
+    with tabs[1]:
+        # Display previous assessments
+        display_previous_assessments()
+
+def update_progress(progress_bar, status_text, progress, message):
+    """Update progress indicators."""
+    progress_bar.progress(progress)
+    status_text.markdown(f"**Status:** {message}")
+
+async def perform_assessment(document, framework, options, progress_callback=None):
     """
-    Run the assessment process asynchronously.
+    Perform document assessment with progress updates.
     
     Args:
         document: Document to assess
-        framework: Framework to assess against
+        framework: Assessment framework
         options: Assessment options
-    
+        progress_callback: Optional callback for progress updates
+        
     Returns:
-        Tuple of (UI-ready assessment results, strategy preview)
+        Assessment result
     """
+    # Initialize LLM
+    llm = CustomLLM(
+        api_key=st.session_state.api_key,
+        model=st.session_state.model
+    )
+    
+    # Initialize strategy executor
+    executor = StrategyExecutor(
+        llm=llm,
+        document=document,
+        framework=framework,
+        options=options
+    )
+    
+    # Set up progress tracking if callback provided
+    if progress_callback:
+        # Track progress updates from executor
+        def track_progress():
+            last_stage = None
+            last_progress = 0
+            
+            while True:
+                # Get current stage and progress
+                current_stage = executor.context.current_stage
+                current_progress = executor.context.progress
+                
+                # Get stage message if available
+                stage_message = "Processing..."
+                if current_stage and current_stage in executor.context.stages:
+                    stage_message = executor.context.stages[current_stage].get("message", "Processing...")
+                
+                # Only update if changed
+                if current_stage != last_stage or abs(current_progress - last_progress) > 0.01:
+                    progress_callback(current_progress, stage_message)
+                    last_stage = current_stage
+                    last_progress = current_progress
+                
+                # Exit if complete
+                if current_progress >= 0.99:
+                    progress_callback(1.0, "Assessment complete")
+                    break
+                    
+                time.sleep(0.5)
+        
+        # Start progress tracking in a separate thread
+        import threading
+        progress_thread = threading.Thread(target=track_progress)
+        progress_thread.daemon = True
+        progress_thread.start()
+    
     try:
-        # Initialize LLM
-        llm = CustomLLM(
-            api_key=st.session_state.api_key,
-            model=st.session_state.model
-        )
-        
-        # Initialize strategy executor
-        executor = StrategyExecutor(
-            llm=llm,
-            document=document,
-            framework=framework,
-            options=options
-        )
-        
-        # Initialize improved progress tracker for the executor
-        progress_tracker = ui_progress.create_executor_progress_tracker(executor)
-        progress_tracker.start_tracking()
-
-        # Get strategy preview - don't wait for complete execution
+        # Get strategy preview first
         strategy_preview = await executor.get_strategy_preview()
         
-        # Display strategy preview while processing
-        with st.expander("Assessment Strategy (Processing...)", expanded=False):
-            st.json(strategy_preview)
+        # Execute assessment
+        result = await executor.execute()
         
-        # Execute assessment and get UI-ready results
-        ui_ready_result = await executor.execute()
-        
-        # Stop progress tracking
-        progress_tracker.stop_tracking()
-        
+        # Make sure strategy is included
+        if "strategy" not in result:
+            result["strategy"] = strategy_preview
+            
         # Save result to file
-        output_path = path_utils.save_assessment_result(ui_ready_result)
+        output_path = path_utils.save_assessment_result(result)
         
-        # Success message
-        st.success(f"Assessment completed successfully and saved to {output_path.name}")
+        # Add file path to result
+        result["output_path"] = str(output_path)
         
-        return ui_ready_result, strategy_preview
+        return result
     except Exception as e:
-        st.error(f"Assessment failed: {str(e)}")
-        # Create basic error result
-        error_result = {
-            "error": str(e),
+        st.error(f"Error during assessment execution: {str(e)}")
+        return {
             "status": "failed",
+            "error": str(e),
             "scorecard": {},
             "reports": {"formats": {}},
             "warnings": [],
-            "errors": [{"message": str(e), "stage": "execution"}]
+            "errors": [{"message": str(e)}]
         }
-        return error_result, None
+
+def display_assessment_results(assessment_result):
+    """
+    Display assessment results with clear visual organization.
+    
+    Args:
+        assessment_result: Assessment result data
+    """
+    # Check if result has error
+    if "error" in assessment_result and assessment_result["error"]:
+        st.error(f"Assessment failed: {assessment_result['error']}")
+        return
+        
+    # Get scorecard and metadata
+    scorecard = assessment_result.get("scorecard", {})
+    metadata = assessment_result.get("metadata", {})
+    
+    # Display overall assessment summary
+    st.markdown("## Assessment Results")
+    
+    # Create metrics for key results
+    overall_rating = scorecard.get("overall_rating")
+    framework_name = metadata.get("framework_name", "Framework")
+    document_name = metadata.get("document_name", "Document")
+    
+    # Format overall rating for display
+    rating_display = "N/A"
+    if overall_rating is not None:
+        try:
+            rating_display = f"{float(overall_rating):.1f}"
+        except (ValueError, TypeError):
+            rating_display = str(overall_rating)
+    
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Overall Rating", rating_display)
+    with col2:
+        st.metric("Framework", framework_name)
+    with col3:
+        st.metric("Document", document_name)
+    
+    # Display executive summary if available
+    executive_summary = scorecard.get("executive_summary", "")
+    if executive_summary:
+        st.markdown("### Executive Summary")
+        st.markdown(executive_summary)
+    
+    # Display key strengths and improvements
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Key Strengths")
+        for strength in scorecard.get("key_strengths", []):
+            st.markdown(f"- {strength}")
+    
+    with col2:
+        st.markdown("### Key Improvements")
+        for improvement in scorecard.get("key_improvements", []):
+            st.markdown(f"- {improvement}")
+    
+    # Display dimension results
+    st.markdown("### Dimension Results")
+    
+    # Create tabs for each dimension
+    dimensions = scorecard.get("dimensions", [])
+    if dimensions:
+        dimension_names = [dim.get("name", f"Dimension {i+1}") for i, dim in enumerate(dimensions)]
+        dimension_tabs = st.tabs(dimension_names)
+        
+        for i, dimension in enumerate(dimensions):
+            with dimension_tabs[i]:
+                display_dimension_results(dimension)
+    else:
+        st.info("No dimension results available.")
+    
+    # Add download buttons for assessment results
+    st.markdown("### Download Assessment")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Download full JSON
+        st.download_button(
+            "Download Full Assessment (JSON)",
+            data=json.dumps(assessment_result, indent=2),
+            file_name="assessment_result.json",
+            mime="application/json"
+        )
+    
+    with col2:
+        # Download scorecard only
+        st.download_button(
+            "Download Scorecard (JSON)",
+            data=json.dumps(scorecard, indent=2),
+            file_name="assessment_scorecard.json",
+            mime="application/json"
+        )
+
+def display_dimension_results(dimension):
+    """Display results for a single dimension."""
+    # Get dimension data
+    dimension_name = dimension.get("name", "Unknown Dimension")
+    dimension_rating = dimension.get("average_rating")
+    dimension_summary = dimension.get("summary", "")
+    
+    # Format dimension rating
+    rating_display = "N/A"
+    if dimension_rating is not None:
+        try:
+            rating_display = f"{float(dimension_rating):.1f}"
+        except (ValueError, TypeError):
+            rating_display = str(dimension_rating)
+    
+    # Display dimension summary
+    st.markdown(f"**Average Rating:** {rating_display}")
+    
+    if dimension_summary:
+        st.markdown(f"**Summary:** {dimension_summary}")
+    
+    # Display strengths and weaknesses
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Strengths")
+        for strength in dimension.get("strengths", []):
+            st.markdown(f"- {strength}")
+    
+    with col2:
+        st.markdown("#### Weaknesses")
+        for weakness in dimension.get("weaknesses", []):
+            st.markdown(f"- {weakness}")
+    
+    # Display criteria
+    st.markdown("#### Criteria Assessments")
+    
+    criteria = dimension.get("criteria", [])
+    if not criteria:
+        st.info("No criteria assessments available for this dimension.")
+        return
+    
+    # Create a dataframe for criteria
+    criteria_data = []
+    
+    for criterion in criteria:
+        # Get criterion data
+        criterion_name = criterion.get("name", "Unknown")
+        criterion_rating = criterion.get("rating")
+        rationale = criterion.get("rationale", "")
+        assessment_type = criterion.get("assessment_type", "Unknown")
+        
+        # Format rating safely
+        rating_display = "N/A"
+        if criterion_rating is not None:
+            try:
+                rating_display = f"{float(criterion_rating):.1f}"
+            except (ValueError, TypeError):
+                rating_display = str(criterion_rating)
+        
+        # Add to data
+        criteria_data.append({
+            "Criterion": criterion_name,
+            "Rating": rating_display,
+            "Assessment Type": assessment_type.replace("_", " ").title(),
+            "Rationale": rationale
+        })
+    
+    # Display criteria as dataframe
+    if criteria_data:
+        df = pd.DataFrame(criteria_data)
+        st.dataframe(df, use_container_width=True)
 
 def display_framework_selection():
     """
@@ -207,7 +516,7 @@ def display_framework_selection():
             if description:
                 st.markdown(f"**Description:** {description}")
             
-            # Display semantic exploration of framework
+            # Display framework structure preview
             if st.checkbox("Explore Framework Structure", key="explore_framework"):
                 display_framework_structure(framework)
             
@@ -216,7 +525,7 @@ def display_framework_selection():
 
 def display_framework_structure(framework):
     """
-    Display interactive framework structure with semantic relationships.
+    Display interactive framework structure preview.
     
     Args:
         framework: Framework data
@@ -224,7 +533,7 @@ def display_framework_structure(framework):
     st.markdown("### Framework Structure")
     
     # Create tabs for structure views
-    structure_tabs = st.tabs(["Dimension View", "Criterion Relationships"])
+    structure_tabs = st.tabs(["Dimension View", "Criterion Overview"])
     
     with structure_tabs[0]:
         # Display dimensions and criteria in a tree structure
@@ -264,35 +573,31 @@ def display_framework_structure(framework):
                     st.info(f"No criteria defined for {dim_name}")
     
     with structure_tabs[1]:
-        # Create a basic network visualization of criteria relationships
-        st.markdown("#### Potential Semantic Relationships")
-        st.info("This visualizes potential semantic relationships between criteria across dimensions. "
-                "The actual semantic grouping will be determined during assessment.")
-        
-        # Collect all criteria
+        # Create a table view of all criteria
         all_criteria = []
+        
         for dimension in framework.get("dimensions", []):
             dim_name = dimension.get("name", "")
+            dim_id = dimension.get("id", "")
+            
             for criterion in dimension.get("criteria", []):
+                crit_name = criterion.get("name", "")
+                crit_id = criterion.get("id", "")
+                crit_question = criterion.get("question", "")
+                
                 all_criteria.append({
-                    "dimension": dim_name,
-                    "id": criterion.get("id", ""),
-                    "name": criterion.get("name", ""),
-                    "question": criterion.get("question", "")
+                    "Dimension": dim_name,
+                    "Dimension ID": dim_id,
+                    "Criterion": crit_name,
+                    "Criterion ID": crit_id,
+                    "Question": crit_question
                 })
         
-        # Display criteria network (simplified version)
-        # In a real implementation, this could be an interactive network visualization
-        for i, criterion in enumerate(all_criteria):
-            st.markdown(
-                f"""
-                <div style="border: 1px solid #3B4252; border-radius: 8px; padding: 10px; margin-bottom: 10px;">
-                    <div style="font-weight: 600;">{criterion['name']} ({criterion['dimension']})</div>
-                    <div style="font-style: italic; font-size: 0.9rem;">{criterion['question']}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        if all_criteria:
+            # Display as searchable table
+            st.dataframe(pd.DataFrame(all_criteria), use_container_width=True)
+        else:
+            st.info("No criteria found in this framework.")
 
 def display_document_upload():
     """
@@ -381,9 +686,7 @@ def display_document_upload():
                 st.code(preview_text, language=None)
             
             with preview_tabs[1]:
-                # Document analysis 
-                # (This would typically come from the MetaPlannerAgent but we're showing 
-                # placeholder content for now)
+                # Document analysis
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -391,18 +694,20 @@ def display_document_upload():
                     st.markdown("**Content Structure:** " + summary.get("content_structure", "General text"))
                 
                 with col2:
-                    st.markdown("**Entity Type:** " + summary.get("entity_type", "Unknown"))
-                    st.markdown("**Evidence Potential:** " + summary.get("evidence_potential", "Medium"))
+                    st.markdown("**Entity Type:** " + summary.get("primary_entity", {}).get("type", "Unknown"))
+                    st.markdown("**Entity Name:** " + summary.get("primary_entity", {}).get("name", "Unknown"))
                 
-                # Show document structure visualization (placeholder)
-                st.info("Document structure analysis will be performed during assessment")
+                # Show keywords if available
+                keywords = summary.get("keywords", [])
+                if keywords:
+                    st.markdown("**Keywords:** " + ", ".join(keywords))
     
     ui_components.end_card_container()
     return uploaded_document
 
 def display_assessment_options():
     """
-    Display enhanced assessment options with semantic grouping controls.
+    Display assessment options with streamlined controls.
     
     Returns:
         Dictionary of assessment options
@@ -411,7 +716,7 @@ def display_assessment_options():
     
     with ui_components.card_container("Assessment Options"):
         # Create tabs for option categories
-        option_tabs = st.tabs(["Basic Options", "Evidence Options", "Assessment Types", "Advanced Options"])
+        option_tabs = st.tabs(["Model & Output", "Evidence Options", "Advanced Options"])
         
         with option_tabs[0]:
             col1, col2 = st.columns(2)
@@ -433,6 +738,7 @@ def display_assessment_options():
                 
                 # Store selection in session state
                 st.session_state.model = selected_model
+                options["model"] = selected_model
                 
                 # Report type
                 report_type = st.selectbox(
@@ -514,7 +820,7 @@ def display_assessment_options():
                 relevance_levels = st.multiselect(
                     "Relevance Levels",
                     options=["Direct", "Indirect", "Contextual", "Implied"],
-                    default=["Direct", "Indirect", "Contextual", "Implied"],
+                    default=["Direct", "Indirect", "Contextual"],
                     key="relevance_levels",
                     help="Types of evidence relevance to collect"
                 )
@@ -530,60 +836,7 @@ def display_assessment_options():
                 options["sentiment_types"] = sentiment_types
         
         with option_tabs[2]:
-            # Assessment type controls
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Direct assessment controls
-                st.markdown("**Direct Assessment Controls**")
-                
-                direct_rating_threshold = st.slider(
-                    "Direct Assessment Threshold",
-                    min_value=0.0,
-                    max_value=1.0,
-                    value=0.7,
-                    step=0.05,
-                    key="direct_rating_threshold",
-                    help="Confidence threshold for direct assessments"
-                )
-                options["direct_rating_threshold"] = direct_rating_threshold
-                
-                # Checkbox for requiring multiple evidence
-                require_multiple_evidence = st.checkbox(
-                    "Require Multiple Evidence Items", 
-                    value=False, 
-                    key="require_multiple_evidence",
-                    help="Require multiple evidence items for direct assessment"
-                )
-                options["require_multiple_evidence"] = require_multiple_evidence
-            
-            with col2:
-                # Inference controls
-                st.markdown("**Inference Controls**")
-                
-                # Maximum inference confidence
-                max_inference_confidence = st.slider(
-                    "Maximum Inference Confidence",
-                    min_value=0.0,
-                    max_value=1.0,
-                    value=0.6,
-                    step=0.05,
-                    key="max_inference_confidence",
-                    help="Maximum confidence level for inferred assessments"
-                )
-                options["max_inference_confidence"] = max_inference_confidence
-                
-                # Inference methods
-                inference_methods = st.multiselect(
-                    "Inference Methods",
-                    options=["Semantic Group Analysis", "Document Context", "Related Criteria"],
-                    default=["Semantic Group Analysis", "Related Criteria"],
-                    key="inference_methods",
-                    help="Methods to use for inference"
-                )
-                options["inference_methods"] = inference_methods
-        
-        with option_tabs[3]:
+            # Advanced options
             col1, col2 = st.columns(2)
             
             with col1:
@@ -598,15 +851,14 @@ def display_assessment_options():
                 )
                 options["max_concurrent"] = max_concurrent
                 
-                # Semantic grouping options
-                semantic_group_method = st.selectbox(
-                    "Semantic Grouping Method",
-                    options=["auto", "topic_based", "criteria_similarity", "question_clustering"],
-                    index=0,
-                    key="semantic_group_method",
-                    help="Method for grouping criteria semantically"
+                # Combined evaluation option
+                use_combined_evaluation = st.checkbox(
+                    "Use Combined Evaluation", 
+                    value=True, 
+                    key="use_combined_evaluation",
+                    help="Evaluate related criteria together for consistency"
                 )
-                options["semantic_group_method"] = semantic_group_method
+                options["use_combined_evaluation"] = use_combined_evaluation
             
             with col2:
                 # Chunking options
@@ -665,31 +917,8 @@ def display_previous_assessments():
                 mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
                 file_size = file_path.stat().st_size / 1024  # Size in KB
                 
-                # Try to load basic metadata without loading the entire file
-                with open(file_path, 'r') as f:
-                    try:
-                        # Read just enough to get metadata
-                        contents = f.read(10000)  # Read first 10KB
-                        # Find the closing brace of metadata
-                        metadata_end = contents.find('"metadata":') 
-                        if metadata_end > 0:
-                            metadata_end = contents.find('}', metadata_end)
-                            if metadata_end > 0:
-                                metadata_text = contents[:metadata_end+1]
-                                # Try to parse this fragment
-                                import re
-                                match = re.search(r'"framework_name":\s*"([^"]+)"', metadata_text)
-                                framework_name = match.group(1) if match else "Unknown"
-                            else:
-                                framework_name = "Unknown"
-                        else:
-                            framework_name = "Unknown"
-                    except:
-                        framework_name = "Unknown"
-                
                 data.append({
                     "File": file_path.name,
-                    "Framework": framework_name,
                     "Date": mtime.strftime("%Y-%m-%d %H:%M"),
                     "Size": f"{file_size:.1f} KB",
                     "Path": file_path
@@ -714,7 +943,7 @@ def display_previous_assessments():
                 selected_indices = st.selectbox(
                     "Select assessment to load",
                     options=range(len(data)),
-                    format_func=lambda i: f"{data[i]['Framework']} - {data[i]['Date']}",
+                    format_func=lambda i: f"{data[i]['File']} - {data[i]['Date']}",
                     key="assessment_selector"
                 )
             
@@ -729,11 +958,6 @@ def display_previous_assessments():
                         # Store in session state
                         st.session_state.assessment_result = assessment_result
                         
-                        # Extract strategy if available
-                        strategy_preview = assessment_result.get("strategy")
-                        if strategy_preview:
-                            st.session_state.strategy_preview = strategy_preview
-                        
                         st.success(f"Loaded assessment: {selected_path.name}")
                         st.rerun()
                     except Exception as e:
@@ -741,109 +965,12 @@ def display_previous_assessments():
     
     ui_components.end_card_container()
 
-def main():
-    """Main application function for framework assessment."""
-    # Page header
-    st.title("🧠 Framework Assessment")
-    st.markdown(
-        """
-        Assess a document against a structured framework using our enhanced AI system with semantic awareness.
-        The system will analyze your document, extract relevant evidence, and provide structured assessment
-        with clear distinction between direct and inferred findings.
-        """
-    )
-    
-    # Check for API key
-    if not hasattr(st.session_state, "api_key") or not st.session_state.api_key:
-        st.warning(
-            "OpenAI API key not found. Please add it to your .env file "
-            "or configure it in the app settings."
-        )
-        return
-    
-    # Initialize tabs for workflow
-    tabs = st.tabs(["Assess New Document", "View Previous Assessments"])
-    
-    with tabs[0]:
-        # Framework selection
-        framework = display_framework_selection()
-        
-        # Document upload
-        document = display_document_upload()
-        
-        # Assessment options
-        options = display_assessment_options()
-        
-        # Add assessment button and handle assessment process
-        start_col, _ = st.columns([1, 3])
-        with start_col:
-            start_assessment = st.button(
-                "Start Assessment", 
-                key="start_assessment_btn", 
-                type="primary", 
-                disabled=not (framework and document),
-                help="Start the assessment process",
-                use_container_width=True
-            )
-        
-        if start_assessment:
-            if not framework:
-                st.error("Please select a framework before starting assessment.")
-                return
-                
-            if not document:
-                st.error("Please upload or paste a document before starting assessment.")
-                return
-            
-            # Create a container for progress tracking
-            progress_container = st.container()
-            with progress_container:
-                st.markdown("### Assessment Progress")
-                
-                # Create a spinner while assessment is running
-                try:
-                    # Define a helper function to run the async code
-                    def run_async_assessment():
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            return loop.run_until_complete(run_assessment(document, framework, options))
-                        finally:
-                            loop.close()
-                    
-                    # Run the async function
-                    ui_ready_result, strategy_preview = run_async_assessment()
-                    
-                    # Store results in session state
-                    st.session_state.assessment_result = ui_ready_result
-                    st.session_state.strategy_preview = strategy_preview
-                    
-                    # Display results
-                    display_results_container = st.container()
-                    with display_results_container:
-                        ui_results.display_assessment_results(ui_ready_result, strategy_preview)
-                    
-                except Exception as e:
-                    st.error(f"Assessment failed: {str(e)}")
-        
-        # Display previously computed results if available
-        elif hasattr(st.session_state, "assessment_result"):
-            ui_results.display_assessment_results(
-                st.session_state.assessment_result,
-                st.session_state.strategy_preview if hasattr(st.session_state, "strategy_preview") else None
-            )
-    
-    with tabs[1]:
-        # Display previous assessments
-        display_previous_assessments()
-
 def initialize_session_state():
     """Initialize session state for the assessment page."""
     if "initialized" not in st.session_state:
         st.session_state.initialized = True
         st.session_state.document = None
         st.session_state.framework = None
-        st.session_state.strategy = None
         st.session_state.assessment_result = None
     
     # Set default model if not already set

@@ -1,9 +1,10 @@
 """
-Improved Evaluator Agent - Handles consolidated evidence packets with flexibility
+Improved Evaluator Agent - Handles consolidated evidence packets with flexibility and reliability
 
 This evaluator processes the consolidated evidence packets created by the extractor,
 supporting both individual and combined evaluation approaches for improved
-assessment consistency and quality.
+assessment consistency and quality. It includes robust error handling and
+consistent assessment type tracking.
 """
 
 import logging
@@ -25,9 +26,10 @@ class EvaluatorAgent(BaseAgent):
     
     Features:
     - Handles the new consolidated evidence packet format
-    - Supports direct and inferred assessments
+    - Supports direct and inferred assessments with consistent typing
     - Creates comprehensive dimension summaries
     - Provides overall assessment with actionable recommendations
+    - Robust error handling
     """
     
     def __init__(
@@ -64,8 +66,13 @@ class EvaluatorAgent(BaseAgent):
         # Criteria grouping size (for combined evaluation)
         self.max_group_size = self.config.get("max_group_size", 3)
         
-        # Track assessment types
-        self._assessment_counts = {"total": 0, "direct": 0, "inferred": 0, "insufficient": 0}
+        # Track assessment types - initialize all possible assessment types
+        self._assessment_counts = {
+            "total": 0, 
+            "direct": 0, 
+            "inferred": 0, 
+            "insufficient_evidence": 0
+        }
         
         self.logger.info(
             f"Evaluator '{self.name}' initialized with evaluation_type={self.evaluation_type}, "
@@ -121,7 +128,7 @@ class EvaluatorAgent(BaseAgent):
                 f"Evaluator '{self.name}' completed in {elapsed_time:.2f}s. "
                 f"Assessment types: Direct={self._assessment_counts['direct']}, "
                 f"Inferred={self._assessment_counts['inferred']}, "
-                f"Insufficient={self._assessment_counts['insufficient']}"
+                f"Insufficient={self._assessment_counts['insufficient_evidence']}"
             )
             
             # Record observation
@@ -150,6 +157,28 @@ class EvaluatorAgent(BaseAgent):
             
             # Return error status
             return {"status": "failed", "error": str(e)}
+    
+    def _increment_assessment_count(self, assessment_type: str):
+        """
+        Safely increment assessment count for the given type.
+        
+        Args:
+            assessment_type: Type of assessment to increment count for
+        """
+        # Increment total
+        self._assessment_counts["total"] += 1
+        
+        # Normalize assessment type to ensure consistency
+        if assessment_type == "insufficient" or assessment_type.startswith("insufficient"):
+            normalized_type = "insufficient_evidence"
+        else:
+            normalized_type = assessment_type
+        
+        # Increment type-specific counter, creating it if it doesn't exist
+        if normalized_type not in self._assessment_counts:
+            self._assessment_counts[normalized_type] = 0
+        
+        self._assessment_counts[normalized_type] += 1
 
     async def _process_with_standard_evaluation(self, dimensions: List[Dict[str, Any]]) -> None:
         """
@@ -164,7 +193,7 @@ class EvaluatorAgent(BaseAgent):
         total_dimensions = len(dimensions)
         
         for i, dimension in enumerate(dimensions):
-            dimension_id = dimension.get("id")
+            dimension_id = dimension.get("id", "")
             dimension_name = dimension.get("name", f"Dimension_{i+1}")
             
             if not dimension_id:
@@ -180,8 +209,13 @@ class EvaluatorAgent(BaseAgent):
             progress = (i + 1) / total_dimensions * 0.8 
             self.update_progress(progress, f"Evaluating dimension {i+1}/{total_dimensions}: {dimension_name}")
             
-            # Evaluate dimension
-            await self._evaluate_dimension(dimension)
+            try:
+                # Evaluate dimension
+                await self._evaluate_dimension(dimension)
+            except Exception as e:
+                self.logger.error(f"Error evaluating dimension {dimension_name}: {str(e)}", exc_info=True)
+                self.context.add_warning(f"Error evaluating dimension {dimension_name}: {str(e)}")
+                # Continue with next dimension
     
     async def _process_with_combined_evaluation(self, dimensions: List[Dict[str, Any]]) -> None:
         """
@@ -196,7 +230,7 @@ class EvaluatorAgent(BaseAgent):
         total_dimensions = len(dimensions)
         
         for i, dimension in enumerate(dimensions):
-            dimension_id = dimension.get("id")
+            dimension_id = dimension.get("id", "")
             dimension_name = dimension.get("name", f"Dimension_{i+1}")
             
             if not dimension_id:
@@ -212,28 +246,33 @@ class EvaluatorAgent(BaseAgent):
             progress = (i + 1) / total_dimensions * 0.8 
             self.update_progress(progress, f"Evaluating dimension {i+1}/{total_dimensions}: {dimension_name}")
             
-            # Get criteria for this dimension
-            criteria = dimension.get("criteria", [])
-            
-            if len(criteria) <= 1:
-                # For single criterion, use standard evaluation
-                await self._evaluate_dimension(dimension)
-            else:
-                # Try to group related criteria
-                criteria_groups = self._group_related_criteria(dimension)
+            try:
+                # Get criteria for this dimension
+                criteria = dimension.get("criteria", [])
                 
-                # Process each group
-                for group in criteria_groups:
-                    if len(group) == 1:
-                        # Individual criterion
-                        criterion = group[0]
-                        await self._evaluate_criterion(dimension_id, criterion)
-                    else:
-                        # Group of related criteria
-                        await self._evaluate_criteria_group(dimension_id, group)
-                
-                # Generate dimension summary
-                await self._generate_dimension_summary_after_groups(dimension)
+                if len(criteria) <= 1:
+                    # For single criterion, use standard evaluation
+                    await self._evaluate_dimension(dimension)
+                else:
+                    # Try to group related criteria
+                    criteria_groups = self._group_related_criteria(dimension)
+                    
+                    # Process each group
+                    for group in criteria_groups:
+                        if len(group) == 1:
+                            # Individual criterion
+                            criterion = group[0]
+                            await self._evaluate_criterion(dimension_id, criterion)
+                        else:
+                            # Group of related criteria
+                            await self._evaluate_criteria_group(dimension_id, group)
+                    
+                    # Generate dimension summary
+                    await self._generate_dimension_summary_after_groups(dimension)
+            except Exception as e:
+                self.logger.error(f"Error processing dimension {dimension_name}: {str(e)}", exc_info=True)
+                self.context.add_warning(f"Error processing dimension {dimension_name}: {str(e)}")
+                # Continue with next dimension
 
     def _group_related_criteria(self, dimension: Dict[str, Any]) -> List[List[Dict[str, Any]]]:
         """
@@ -278,7 +317,7 @@ class EvaluatorAgent(BaseAgent):
         Returns:
             Dimension evaluation summary
         """
-        dimension_id = dimension.get("id")
+        dimension_id = dimension.get("id", "")
         dimension_name = dimension.get("name", "Unknown Dimension")
         criteria = dimension.get("criteria", [])
         
@@ -304,51 +343,73 @@ class EvaluatorAgent(BaseAgent):
         
         # Evaluate each criterion individually
         for criterion in criteria:
-            criterion_id = criterion.get("id")
-            criterion_name = criterion.get("name", f"Criterion_{criterion_id}")
-            
-            if not criterion_id:
-                self.logger.warning(f"Skipping criterion without ID in dimension {dimension_name}")
-                continue
+            try:
+                criterion_id = criterion.get("id", "")
+                criterion_name = criterion.get("name", f"Criterion_{criterion_id}")
+                
+                if not criterion_id:
+                    self.logger.warning(f"Skipping criterion without ID in dimension {dimension_name}")
+                    continue
 
-            self.logger.info(f"Evaluating: {criterion_name} ({criterion_id}) in {dimension_name}")
-            
-            # Evaluate criterion and store in context
-            result = await self._evaluate_criterion(dimension_id, criterion)
-            
-            # Track assessment type
-            if result:
-                assessment_type = result.get("assessment_type", "insufficient_evidence")
-                assessment_types[assessment_type] = assessment_types.get(assessment_type, 0) + 1
+                self.logger.info(f"Evaluating: {criterion_name} ({criterion_id}) in {dimension_name}")
                 
-                # Update global counters
-                self._assessment_counts["total"] += 1
-                self._assessment_counts[assessment_type] += 1
+                # Evaluate criterion and store in context
+                result = await self._evaluate_criterion(dimension_id, criterion)
                 
-                # Store for dimension summary
-                criteria_results[criterion_id] = {
-                    "name": criterion_name,
-                    "rating": result.get("rating"),
-                    "rationale": result.get("rationale"),
-                    "assessment_type": assessment_type,
-                    "strengths": result.get("strengths", []),
-                    "weaknesses": result.get("weaknesses", [])
-                }
+                # Track assessment type
+                if result:
+                    assessment_type = result.get("assessment_type", "insufficient_evidence")
+                    
+                    # Ensure the key exists in the dictionary
+                    if assessment_type not in assessment_types:
+                        assessment_types[assessment_type] = 0
+                        
+                    assessment_types[assessment_type] += 1
+                    
+                    # Store for dimension summary
+                    criteria_results[criterion_id] = {
+                        "name": criterion_name,
+                        "rating": result.get("rating"),
+                        "rationale": result.get("rationale"),
+                        "assessment_type": assessment_type,
+                        "strengths": result.get("strengths", []),
+                        "weaknesses": result.get("weaknesses", [])
+                    }
+            except Exception as e:
+                self.logger.error(f"Error evaluating criterion {criterion.get('id', 'unknown')}: {str(e)}", exc_info=True)
+                self.context.add_warning(f"Error evaluating criterion {criterion.get('id', 'unknown')}: {str(e)}")
+                # Continue with next criterion
         
-        # Generate dimension summary
-        dimension_summary = await self._generate_dimension_summary(
-            dimension, criteria_results, assessment_types
-        )
-        
-        # Store dimension summary in context
-        self.context.set_dimension_summary(dimension_id, dimension_summary)
-        
-        self.logger.info(
-            f"Completed evaluation of dimension '{dimension_name}' with "
-            f"{len(criteria_results)} criteria. Assessment types: {assessment_types}"
-        )
-        
-        return dimension_summary
+        try:
+            # Generate dimension summary
+            dimension_summary = await self._generate_dimension_summary(
+                dimension, criteria_results, assessment_types
+            )
+            
+            # Store dimension summary in context
+            self.context.set_dimension_summary(dimension_id, dimension_summary)
+            
+            self.logger.info(
+                f"Completed evaluation of dimension '{dimension_name}' with "
+                f"{len(criteria_results)} criteria."
+            )
+            
+            return dimension_summary
+        except Exception as e:
+            self.logger.error(f"Error generating dimension summary for {dimension_id}: {str(e)}", exc_info=True)
+            self.context.add_warning(f"Error generating dimension summary for {dimension_id}: {str(e)}")
+            
+            # Return a basic summary
+            return {
+                "id": dimension_id,
+                "name": dimension_name,
+                "average_rating": None,
+                "criteria_assessed": len(criteria_results),
+                "criteria_total": len(criteria),
+                "strengths": [],
+                "weaknesses": [],
+                "summary": f"Error generating summary: {str(e)}"
+            }
 
     async def _evaluate_criterion(self, dimension_id: str, criterion: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -361,7 +422,7 @@ class EvaluatorAgent(BaseAgent):
         Returns:
             Assessment dictionary
         """
-        criterion_id = criterion.get("id")
+        criterion_id = criterion.get("id", "")
         criterion_name = criterion.get("name", "")
         
         try:
@@ -434,7 +495,7 @@ class EvaluatorAgent(BaseAgent):
         evidence_packets = {}
         
         for criterion in criteria_group:
-            criterion_id = criterion.get("id")
+            criterion_id = criterion.get("id", "")
             if not criterion_id:
                 continue
                 
@@ -450,7 +511,7 @@ class EvaluatorAgent(BaseAgent):
             results = {}
             
             for criterion in criteria_group:
-                criterion_id = criterion.get("id")
+                criterion_id = criterion.get("id", "")
                 if criterion_id:
                     results[criterion_id] = await self._evaluate_criterion(dimension_id, criterion)
                     
@@ -479,16 +540,24 @@ class EvaluatorAgent(BaseAgent):
         # Format criteria information
         criteria_info = []
         for criterion in criteria_group:
-            criterion_id = criterion.get("id")
+            criterion_id = criterion.get("id", "")
             
             if not criterion_id:
                 continue
+                
+            # Create scoring definitions text
+            scoring_defs = criterion.get("scoring_definitions", {})
+            formatted_scoring = []
+            
+            for score, definition in scoring_defs.items():
+                formatted_scoring.append(f"Score {score}: {definition}")
                 
             criteria_info.append({
                 "id": criterion_id,
                 "name": criterion.get("name", ""),
                 "question": criterion.get("question", ""),
-                "scoring_definitions": criterion.get("scoring_definitions", {})
+                "scoring_summary": "\n".join(formatted_scoring),
+                "dimension_id": dimension_id
             })
         
         # Format evidence packets
@@ -524,6 +593,9 @@ For each criterion, provide:
 4. WEAKNESSES: Key weaknesses identified from the evidence (2-3 items)
 5. CONFIDENCE: Score (0.0-1.0) reflecting the reliability of the assessment
 6. ASSESSMENT_TYPE: "direct" (if strong evidence) or "inferred" (if limited evidence)
+
+If the evidence is limited but allows for reasonable inference, mark the assessment as "inferred" and begin the rationale with "[INFERRED]".
+If the evidence is strong and directly addresses the criterion, mark the assessment as "direct".
 
 Consider the relationships between these criteria when making your assessments.
 Ensure your ratings are CONSISTENT and CALIBRATED across criteria.
@@ -568,7 +640,7 @@ Ensure your ratings are CONSISTENT and CALIBRATED across criteria.
                 # Fallback to individual assessment
                 individual_results = {}
                 for criterion in criteria_group:
-                    criterion_id = criterion.get("id")
+                    criterion_id = criterion.get("id", "")
                     if criterion_id:
                         individual_results[criterion_id] = await self._evaluate_criterion(dimension_id, criterion)
                         
@@ -578,7 +650,7 @@ Ensure your ratings are CONSISTENT and CALIBRATED across criteria.
             group_results = {}
             
             for assessment in result["assessments"]:
-                criterion_id = assessment.get("criterion_id")
+                criterion_id = assessment.get("criterion_id", "")
                 
                 if not criterion_id:
                     continue
@@ -588,36 +660,52 @@ Ensure your ratings are CONSISTENT and CALIBRATED across criteria.
                 if not criterion:
                     continue
                 
+                # Ensure consistency between rationale and assessment type
+                assessment_type = assessment.get("assessment_type", "insufficient_evidence")
+                rationale = assessment.get("rationale", "")
+                
+                # Check for mismatches and fix them
+                if rationale.startswith("[INFERRED]") and assessment_type != "inferred":
+                    assessment_type = "inferred"
+                elif assessment_type == "inferred" and not rationale.startswith("[INFERRED]"):
+                    rationale = f"[INFERRED] {rationale}"
+                
+                # Ensure numerical rating if provided
+                rating = assessment.get("rating")
+                if rating is not None:
+                    try:
+                        rating = float(rating)
+                    except (ValueError, TypeError):
+                        rating = None
+                
                 # Create a full assessment object
                 full_assessment = {
                     "id": criterion_id,
                     "name": criterion.get("name", ""),
-                    "rating": assessment.get("rating"),
-                    "rationale": assessment.get("rationale", ""),
+                    "rating": rating,
+                    "rationale": rationale,
                     "strengths": assessment.get("strengths", []),
                     "weaknesses": assessment.get("weaknesses", []),
                     "confidence": assessment.get("confidence", 0.0),
-                    "assessment_type": assessment.get("assessment_type", "insufficient_evidence")
+                    "assessment_type": assessment_type
                 }
                 
-                # Ensure inferred assessments are properly marked
-                if full_assessment["assessment_type"] == "inferred" and not full_assessment["rationale"].startswith("[INFERRED]"):
-                    full_assessment["rationale"] = f"[INFERRED] {full_assessment['rationale']}"
-                
                 # Store assessment in context
-                self.set_criterion_assessment(
-                    dimension_id=dimension_id,
-                    criterion_id=criterion_id,
-                    rating=full_assessment.get("rating"),
-                    rationale=full_assessment.get("rationale"),
-                    confidence=full_assessment.get("confidence"),
-                    assessment_type=full_assessment.get("assessment_type")
-                )
-                
-                # Track assessment type
-                assessment_type = full_assessment.get("assessment_type", "insufficient_evidence")
-                self._assessment_counts["total"] += 1
-                self._assessment_counts[assessment_type] += 1
+                try:
+                    self.set_criterion_assessment(
+                        dimension_id=dimension_id,
+                        criterion_id=criterion_id,
+                        rating=full_assessment.get("rating"),
+                        rationale=full_assessment.get("rationale"),
+                        confidence=full_assessment.get("confidence"),
+                        assessment_type=assessment_type
+                    )
+                    
+                    # Track assessment type
+                    self._increment_assessment_count(assessment_type)
+                except Exception as e:
+                    self.logger.error(f"Error storing assessment for {criterion_id}: {str(e)}")
+                    self.context.add_warning(f"Error storing assessment for {criterion_id}: {str(e)}")
                 
                 # Store in results
                 group_results[criterion_id] = full_assessment
@@ -626,11 +714,12 @@ Ensure your ratings are CONSISTENT and CALIBRATED across criteria.
             
         except Exception as e:
             self.logger.error(f"Error in group assessment: {str(e)}", exc_info=True)
+            self.context.add_warning(f"Error in group assessment: {str(e)}")
             
             # Fallback to individual assessment
             individual_results = {}
             for criterion in criteria_group:
-                criterion_id = criterion.get("id")
+                criterion_id = criterion.get("id", "")
                 if criterion_id:
                     individual_results[criterion_id] = await self._evaluate_criterion(dimension_id, criterion)
                     
@@ -653,7 +742,7 @@ Ensure your ratings are CONSISTENT and CALIBRATED across criteria.
         Returns:
             Assessment dictionary
         """
-        criterion_id = criterion.get("id")
+        criterion_id = criterion.get("id", "")
         criterion_name = criterion.get("name", "")
         criterion_question = criterion.get("question", "")
         scoring_definitions = criterion.get("scoring_definitions", {})
@@ -702,7 +791,7 @@ Based on this evidence, provide:
 5. CONFIDENCE: A score (0.0-1.0) reflecting how well the evidence supports your assessment
 
 If the evidence is strong and directly addresses the criterion, mark this as a DIRECT assessment.
-If the evidence is limited but allows for reasonable inference, mark this as an INFERRED assessment.
+If the evidence is limited but allows for reasonable inference, mark this as an INFERRED assessment and begin your rationale with "[INFERRED]".
 """
 
         # Define schema for assessment
@@ -731,6 +820,14 @@ If the evidence is limited but allows for reasonable inference, mark this as an 
             if not result or "rationale" not in result:
                 return self._create_insufficient_evidence_assessment(dimension_id, criterion)
             
+            # Ensure numerical rating if provided
+            rating = result.get("rating")
+            if rating is not None:
+                try:
+                    rating = float(rating)
+                except (ValueError, TypeError):
+                    rating = None
+            
             # Check confidence against threshold
             confidence = result.get("confidence", 0.0)
             if confidence < self.min_confidence_threshold:
@@ -741,17 +838,20 @@ If the evidence is limited but allows for reasonable inference, mark this as an 
             
             # Get assessment type
             assessment_type = result.get("assessment_type", "insufficient_evidence")
+            rationale = result.get("rationale", "")
             
-            # Ensure inferred assessments are properly marked
-            if assessment_type == "inferred" and not result["rationale"].startswith("[INFERRED]"):
-                result["rationale"] = f"[INFERRED] {result['rationale']}"
+            # Ensure consistency between rationale and assessment type
+            if assessment_type == "inferred" and not rationale.startswith("[INFERRED]"):
+                rationale = f"[INFERRED] {rationale}"
+            elif rationale.startswith("[INFERRED]") and assessment_type != "inferred":
+                assessment_type = "inferred"
             
             # Create final assessment
             assessment = {
                 "id": criterion_id,
                 "name": criterion_name,
-                "rating": result.get("rating"),
-                "rationale": result.get("rationale", ""),
+                "rating": rating,
+                "rationale": rationale,
                 "strengths": result.get("strengths", []),
                 "weaknesses": result.get("weaknesses", []),
                 "confidence": confidence,
@@ -759,22 +859,31 @@ If the evidence is limited but allows for reasonable inference, mark this as an 
             }
             
             # Store assessment in context
-            success = self.set_criterion_assessment(
-                dimension_id=dimension_id,
-                criterion_id=criterion_id,
-                rating=assessment.get("rating"),
-                rationale=assessment.get("rationale"),
-                confidence=confidence,
-                assessment_type=assessment_type
-            )
-            
-            if not success:
-                self.logger.error(f"Failed to store assessment for {criterion_id} in context")
+            try:
+                success = self.set_criterion_assessment(
+                    dimension_id=dimension_id,
+                    criterion_id=criterion_id,
+                    rating=assessment.get("rating"),
+                    rationale=assessment.get("rationale"),
+                    confidence=confidence,
+                    assessment_type=assessment_type
+                )
+                
+                if not success:
+                    self.logger.error(f"Failed to store assessment for {criterion_id} in context")
+                
+                # Track assessment type counts
+                self._increment_assessment_count(assessment_type)
+                
+            except Exception as e:
+                self.logger.error(f"Error storing assessment for {criterion_id}: {str(e)}")
+                self.context.add_warning(f"Error storing assessment for {criterion_id}: {str(e)}")
             
             return assessment
             
         except Exception as e:
             self.logger.error(f"Error creating assessment from packet for {criterion_id}: {str(e)}", exc_info=True)
+            self.context.add_warning(f"Error creating assessment for {criterion_id}: {str(e)}")
             return self._create_insufficient_evidence_assessment(dimension_id, criterion)
 
     async def _create_inferred_assessment(
@@ -794,7 +903,7 @@ If the evidence is limited but allows for reasonable inference, mark this as an 
         Returns:
             Inferred assessment dictionary
         """
-        criterion_id = criterion.get("id")
+        criterion_id = criterion.get("id", "")
         criterion_name = criterion.get("name", "")
         criterion_question = criterion.get("question", "")
         scoring_definitions = criterion.get("scoring_definitions", {})
@@ -866,9 +975,16 @@ If the evidence is truly insufficient for even a reasonable inference, indicate 
             if not result or "rationale" not in result:
                 return self._create_insufficient_evidence_assessment(dimension_id, criterion)
             
+            # Ensure numerical rating if provided
+            rating = result.get("rating")
+            if rating is not None:
+                try:
+                    rating = float(rating)
+                except (ValueError, TypeError):
+                    rating = None
+            
             # Check confidence and rating
             confidence = result.get("confidence", 0.0)
-            rating = result.get("rating")
             
             if confidence < self.min_confidence_threshold or rating is None:
                 return self._create_insufficient_evidence_assessment(dimension_id, criterion)
@@ -896,19 +1012,28 @@ If the evidence is truly insufficient for even a reasonable inference, indicate 
             }
             
             # Store assessment in context
-            self.set_criterion_assessment(
-                dimension_id=dimension_id,
-                criterion_id=criterion_id,
-                rating=assessment.get("rating"),
-                rationale=assessment.get("rationale"),
-                confidence=confidence,
-                assessment_type="inferred"
-            )
+            try:
+                self.set_criterion_assessment(
+                    dimension_id=dimension_id,
+                    criterion_id=criterion_id,
+                    rating=assessment.get("rating"),
+                    rationale=assessment.get("rationale"),
+                    confidence=confidence,
+                    assessment_type="inferred"
+                )
+                
+                # Track assessment type counts
+                self._increment_assessment_count("inferred")
+                
+            except Exception as e:
+                self.logger.error(f"Error storing inferred assessment for {criterion_id}: {str(e)}")
+                self.context.add_warning(f"Error storing inferred assessment for {criterion_id}: {str(e)}")
             
             return assessment
             
         except Exception as e:
             self.logger.error(f"Error creating inferred assessment for {criterion_id}: {str(e)}", exc_info=True)
+            self.context.add_warning(f"Error creating inferred assessment for {criterion_id}: {str(e)}")
             return self._create_insufficient_evidence_assessment(dimension_id, criterion)
 
     def _create_insufficient_evidence_assessment(self, dimension_id: str, criterion: Dict[str, Any]) -> Dict[str, Any]:
@@ -922,31 +1047,55 @@ If the evidence is truly insufficient for even a reasonable inference, indicate 
         Returns:
             Insufficient evidence assessment
         """
-        criterion_id = criterion.get("id")
-        criterion_name = criterion.get("name", "")
-        
-        assessment = {
-            "id": criterion_id,
-            "name": criterion_name,
-            "rating": None,
-            "rationale": f"Insufficient evidence to assess '{criterion_name}'.",
-            "confidence": 0.0,
-            "assessment_type": "insufficient_evidence",
-            "strengths": [],
-            "weaknesses": []
-        }
-        
-        # Store in context
-        self.set_criterion_assessment(
-            dimension_id=dimension_id,
-            criterion_id=criterion_id,
-            rating=None,
-            rationale=assessment["rationale"],
-            confidence=0.0,
-            assessment_type="insufficient_evidence"
-        )
-        
-        return assessment
+        try:
+            criterion_id = criterion.get("id", "")
+            criterion_name = criterion.get("name", "")
+            
+            assessment = {
+                "id": criterion_id,
+                "name": criterion_name,
+                "rating": None,
+                "rationale": f"Insufficient evidence to assess '{criterion_name}'.",
+                "confidence": 0.0,
+                "assessment_type": "insufficient_evidence",
+                "strengths": [],
+                "weaknesses": []
+            }
+            
+            # Store in context - catch exceptions but don't fail if this doesn't work
+            try:
+                self.set_criterion_assessment(
+                    dimension_id=dimension_id,
+                    criterion_id=criterion_id,
+                    rating=None,
+                    rationale=assessment["rationale"],
+                    confidence=0.0,
+                    assessment_type="insufficient_evidence"
+                )
+                
+                # Track assessment type counts
+                self._increment_assessment_count("insufficient_evidence")
+                
+            except Exception as e:
+                self.logger.warning(f"Failed to store insufficient evidence assessment for {criterion_id}: {str(e)}")
+                # Continue anyway - don't let this stop the assessment
+            
+            return assessment
+            
+        except Exception as e:
+            # Last resort error handling - return a minimal valid structure
+            self.logger.error(f"Error creating insufficient evidence assessment: {str(e)}")
+            
+            return {
+                "id": criterion.get("id", "unknown"),
+                "name": criterion.get("name", "Unknown Criterion"),
+                "rating": None,
+                "rationale": "Error creating assessment: insufficient evidence",
+                "confidence": 0.0,
+                "assessment_type": "insufficient_evidence",
+                "strengths": [],
+                "weaknesses": []
+            }
 
     async def _generate_dimension_summary_after_groups(self, dimension: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -958,7 +1107,7 @@ If the evidence is truly insufficient for even a reasonable inference, indicate 
         Returns:
             Dimension summary
         """
-        dimension_id = dimension.get("id")
+        dimension_id = dimension.get("id", "")
         dimension_name = dimension.get("name", "Unknown Dimension")
         criteria = dimension.get("criteria", [])
         
@@ -967,35 +1116,60 @@ If the evidence is truly insufficient for even a reasonable inference, indicate 
         assessment_types = {"direct": 0, "inferred": 0, "insufficient_evidence": 0}
         
         for criterion in criteria:
-            criterion_id = criterion.get("id")
+            criterion_id = criterion.get("id", "")
             if not criterion_id:
                 continue
                 
             # Get assessment from context
-            assessment = self.context.get_criterion_assessment(dimension_id, criterion_id)
-            
-            if assessment:
-                assessment_type = assessment.get("assessment_type", "insufficient_evidence")
-                assessment_types[assessment_type] = assessment_types.get(assessment_type, 0) + 1
+            try:
+                assessment = self.context.get_criterion_assessment(dimension_id, criterion_id)
                 
-                criteria_results[criterion_id] = {
-                    "name": criterion.get("name", ""),
-                    "rating": assessment.get("rating"),
-                    "rationale": assessment.get("rationale"),
-                    "assessment_type": assessment_type,
-                    "strengths": assessment.get("strengths", []),
-                    "weaknesses": assessment.get("weaknesses", [])
-                }
+                if assessment:
+                    assessment_type = assessment.get("assessment_type", "insufficient_evidence")
+                    
+                    # Ensure the key exists in the dictionary
+                    if assessment_type not in assessment_types:
+                        assessment_types[assessment_type] = 0
+                    
+                    assessment_types[assessment_type] += 1
+                    
+                    criteria_results[criterion_id] = {
+                        "name": criterion.get("name", ""),
+                        "rating": assessment.get("rating"),
+                        "rationale": assessment.get("rationale"),
+                        "assessment_type": assessment_type,
+                        "strengths": assessment.get("strengths", []),
+                        "weaknesses": assessment.get("weaknesses", [])
+                    }
+            except Exception as e:
+                self.logger.error(f"Error getting assessment for {criterion_id}: {str(e)}")
+                self.context.add_warning(f"Error getting assessment for {criterion_id}: {str(e)}")
         
         # Generate dimension summary
-        dimension_summary = await self._generate_dimension_summary(
-            dimension, criteria_results, assessment_types
-        )
-        
-        # Store dimension summary in context
-        self.context.set_dimension_summary(dimension_id, dimension_summary)
-        
-        return dimension_summary
+        try:
+            dimension_summary = await self._generate_dimension_summary(
+                dimension, criteria_results, assessment_types
+            )
+            
+            # Store dimension summary in context
+            self.context.set_dimension_summary(dimension_id, dimension_summary)
+            
+            return dimension_summary
+            
+        except Exception as e:
+            self.logger.error(f"Error generating dimension summary for {dimension_id}: {str(e)}", exc_info=True)
+            self.context.add_warning(f"Error generating dimension summary for {dimension_id}: {str(e)}")
+            
+            # Create a basic summary on error
+            return {
+                "id": dimension_id,
+                "name": dimension_name,
+                "criteria_assessed": len(criteria_results),
+                "criteria_total": len(criteria),
+                "strengths": [],
+                "weaknesses": [],
+                "summary": f"Error generating dimension summary: {str(e)}"
+            }
 
     async def _generate_dimension_summary(
         self, 
@@ -1014,7 +1188,7 @@ If the evidence is truly insufficient for even a reasonable inference, indicate 
         Returns:
             Dimension summary dictionary
         """
-        dimension_id = dimension.get("id")
+        dimension_id = dimension.get("id", "")
         dimension_name = dimension.get("name", "Unknown Dimension")
         
         # Calculate average rating
@@ -1039,7 +1213,11 @@ If the evidence is truly insufficient for even a reasonable inference, indicate 
             }
         
         # Format criteria results for prompt
-        criteria_text = json.dumps(criteria_results, indent=2)
+        criteria_text = "CRITERIA ASSESSMENTS:\n"
+        for criterion_id, result in criteria_results.items():
+            criteria_text += f"\n{result['name']} (Assessment Type: {result['assessment_type']})\n"
+            criteria_text += f"Rating: {result['rating']}\n"
+            criteria_text += f"Rationale: {result['rationale']}\n"
         
         # Create system prompt
         system_prompt = """You are an expert analyst synthesizing criteria assessments into dimension summaries.
@@ -1050,7 +1228,6 @@ Create a concise, insight-driven summary that identifies key patterns across the
 
 AVERAGE RATING: {average_rating if average_rating is not None else 'N/A'}
 
-CRITERIA ASSESSMENTS:
 {criteria_text}
 
 ASSESSMENT TYPES DISTRIBUTION:
@@ -1105,6 +1282,7 @@ Prioritize insights from criteria with direct assessments over those with inferr
             
         except Exception as e:
             self.logger.error(f"Error generating dimension summary for {dimension_id}: {str(e)}")
+            self.context.add_warning(f"Error generating dimension summary for {dimension_id}: {str(e)}")
             
             # Return basic summary on error
             return {
@@ -1131,62 +1309,65 @@ Prioritize insights from criteria with direct assessments over those with inferr
         """
         self.logger.info("Generating overall assessment")
         
-        # Fetch dimension summaries from context
-        dimension_summaries = []
-        dimension_ratings = []
-        total_criteria_assessed = 0
-        total_criteria = 0
-        overall_assessment_types = {"direct": 0, "inferred": 0, "insufficient_evidence": 0}
-        
-        for dimension in dimensions:
-            dimension_id = dimension.get("id")
-            if not dimension_id:
-                continue
-                
-            # Get dimension summary from context
-            summary = self.context.get_dimension_summary(dimension_id)
+        try:
+            # Fetch dimension summaries from context
+            dimension_summaries = []
+            dimension_ratings = []
+            total_criteria_assessed = 0
+            total_criteria = 0
+            overall_assessment_types = {"direct": 0, "inferred": 0, "insufficient_evidence": 0}
             
-            if summary:
-                # Add to summaries list
-                dimension_summaries.append({
-                    "id": dimension_id,
-                    "name": summary.get("name", dimension_id),
-                    "average_rating": summary.get("average_rating"),
-                    "summary": summary.get("summary", ""),
-                    "strengths": summary.get("strengths", []),
-                    "weaknesses": summary.get("weaknesses", [])
-                })
-                
-                # Collect ratings for overall average
-                if summary.get("average_rating") is not None:
-                    dimension_ratings.append(summary["average_rating"])
+            for dimension in dimensions:
+                dimension_id = dimension.get("id", "")
+                if not dimension_id:
+                    continue
                     
-                # Aggregate stats
-                total_criteria_assessed += summary.get("criteria_assessed", 0)
-                total_criteria += summary.get("criteria_total", 0)
+                # Get dimension summary from context
+                summary = self.context.get_dimension_summary(dimension_id)
                 
-                # Aggregate assessment types
-                dim_types = summary.get("assessment_types", {})
-                for atype, count in dim_types.items():
-                    overall_assessment_types[atype] = overall_assessment_types.get(atype, 0) + count
-        
-        # Calculate overall rating and coverage
-        overall_rating = sum(dimension_ratings) / len(dimension_ratings) if dimension_ratings else None
-        criteria_coverage = total_criteria_assessed / max(1, total_criteria) if total_criteria > 0 else 0
-        direct_assessment_percentage = (
-            overall_assessment_types.get("direct", 0) / max(1, total_criteria_assessed)
-            if total_criteria_assessed > 0 else 0
-        )
-        
-        # Format dimension summaries for prompt
-        summaries_text = json.dumps(dimension_summaries, indent=2)
-        
-        # Create system prompt
-        system_prompt = """You are an expert assessment analyst creating an executive summary.
+                if summary:
+                    # Add to summaries list
+                    dimension_summaries.append({
+                        "id": dimension_id,
+                        "name": summary.get("name", dimension_id),
+                        "average_rating": summary.get("average_rating"),
+                        "summary": summary.get("summary", ""),
+                        "strengths": summary.get("strengths", []),
+                        "weaknesses": summary.get("weaknesses", [])
+                    })
+                    
+                    # Collect ratings for overall average
+                    if summary.get("average_rating") is not None:
+                        dimension_ratings.append(summary["average_rating"])
+                        
+                    # Aggregate stats
+                    total_criteria_assessed += summary.get("criteria_assessed", 0)
+                    total_criteria += summary.get("criteria_total", 0)
+                    
+                    # Aggregate assessment types
+                    dim_types = summary.get("assessment_types", {})
+                    for atype, count in dim_types.items():
+                        if atype not in overall_assessment_types:
+                            overall_assessment_types[atype] = 0
+                        overall_assessment_types[atype] += count
+            
+            # Calculate overall rating and coverage
+            overall_rating = sum(dimension_ratings) / len(dimension_ratings) if dimension_ratings else None
+            criteria_coverage = total_criteria_assessed / max(1, total_criteria) if total_criteria > 0 else 0
+            direct_assessment_percentage = (
+                overall_assessment_types.get("direct", 0) / max(1, total_criteria_assessed)
+                if total_criteria_assessed > 0 else 0
+            )
+            
+            # Format dimension summaries for prompt
+            summaries_text = json.dumps(dimension_summaries, indent=2)
+            
+            # Create system prompt
+            system_prompt = """You are an expert assessment analyst creating an executive summary.
 Synthesize dimension assessments into a cohesive overall view with strategic insights and recommendations."""
-        
-        # Create human prompt
-        human_prompt = f"""Generate an overall assessment based on the following dimension summaries:
+            
+            # Create human prompt
+            human_prompt = f"""Generate an overall assessment based on the following dimension summaries:
 
 DIMENSION SUMMARIES:
 {summaries_text}
@@ -1207,19 +1388,18 @@ Focus on high-level insights, patterns across dimensions, and strategic implicat
 Consider the assessment reliability in your analysis.
 """
 
-        # Define schema for overall assessment
-        assessment_schema = {
-            "type": "object",
-            "properties": {
-                "executive_summary": {"type": "string"},
-                "key_strengths": {"type": "array", "items": {"type": "string"}},
-                "key_improvements": {"type": "array", "items": {"type": "string"}},
-                "recommendations": {"type": "array", "items": {"type": "string"}}
-            },
-            "required": ["executive_summary", "key_strengths", "key_improvements", "recommendations"]
-        }
+            # Define schema for overall assessment
+            assessment_schema = {
+                "type": "object",
+                "properties": {
+                    "executive_summary": {"type": "string"},
+                    "key_strengths": {"type": "array", "items": {"type": "string"}},
+                    "key_improvements": {"type": "array", "items": {"type": "string"}},
+                    "recommendations": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["executive_summary", "key_strengths", "key_improvements", "recommendations"]
+            }
 
-        try:
             # Call LLM for overall assessment
             result = await self._structured_output_call(
                 prompt=human_prompt,
@@ -1249,26 +1429,30 @@ Consider the assessment reliability in your analysis.
             
             self.logger.info("Generated and stored overall assessment")
             return overall_assessment
-            
+        
         except Exception as e:
-            self.logger.error(f"Error generating overall assessment: {str(e)}")
+            self.logger.error(f"Error generating overall assessment: {str(e)}", exc_info=True)
+            self.context.add_warning(f"Error generating overall assessment: {str(e)}")
             
             # Create basic assessment on error
             basic_assessment = {
-                "average_rating": overall_rating,
-                "criteria_assessed": total_criteria_assessed,
-                "criteria_total": total_criteria,
-                "criteria_coverage": criteria_coverage,
-                "dimension_count": len(dimension_summaries),
+                "average_rating": None,
+                "criteria_assessed": 0,
+                "criteria_total": 0,
+                "criteria_coverage": 0,
+                "dimension_count": 0,
                 "executive_summary": f"Error generating overall assessment: {str(e)}",
                 "key_strengths": [],
                 "key_improvements": [],
                 "recommendations": [],
-                "assessment_types": overall_assessment_types,
+                "assessment_types": {"direct": 0, "inferred": 0, "insufficient_evidence": 0},
                 "timestamp": time.time()
             }
             
-            # Store basic assessment in context
-            self.set_overall_assessment(basic_assessment)
+            # Still try to store basic assessment in context
+            try:
+                self.set_overall_assessment(basic_assessment)
+            except Exception as store_error:
+                self.logger.error(f"Error storing basic assessment: {str(store_error)}")
             
             return basic_assessment
